@@ -1,0 +1,44 @@
+# Employee Management System - Apache Configuration
+
+# Enable rewrite engine
+RewriteEngine On
+
+# Custom Error Pages (use relative paths to avoid loops)
+ErrorDocument 404 /employee_management_system/404.php
+ErrorDocument 500 /employee_management_system/500.php
+
+# Prevent access to sensitive files
+<Files "*.sql">
+    Order allow,deny
+    Deny from all
+</Files>
+
+<Files "*.log">
+    Order allow,deny
+    Deny from all
+</Files>
+
+<Files ".env">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Prevent access to config files
+<FilesMatch "\.(ini|conf|cfg)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Prevent directory browsing
+Options -Indexes
+
+# Cache static assets
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/jpg "access plus 1 month"
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/gif "access plus 1 month"
+</IfModule>
