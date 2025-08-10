@@ -12,6 +12,16 @@ function isActiveMenu($page, $currentPage, $currentDir = '') {
     
     return false;
 }
+
+// Determine the correct base path based on current location
+$currentDirName = basename(dirname($_SERVER['PHP_SELF']));
+$basePath = '';
+
+if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports', 'settings', 'tasks', 'salary'])) {
+    $basePath = '../../';
+} else {
+    $basePath = '';
+}
 ?>
 
 <!-- Enhanced Sidebar -->
@@ -37,7 +47,7 @@ function isActiveMenu($page, $currentPage, $currentDir = '') {
         <ul class="sidebar-menu stagger-animation">
             <!-- Dashboard -->
             <li class="menu-item">
-                <a href="index.php" class="menu-link <?php echo isActiveMenu('index', $currentPage) ? 'active' : ''; ?>" data-tooltip="Dashboard Overview">
+                <a href="<?php echo $basePath; ?>index.php" class="menu-link <?php echo isActiveMenu('index', $currentPage) ? 'active' : ''; ?>" data-tooltip="Dashboard Overview">
                     <div class="menu-icon-wrapper">
                         <i class="fas fa-tachometer-alt menu-icon"></i>
                     </div>
@@ -55,7 +65,7 @@ function isActiveMenu($page, $currentPage, $currentDir = '') {
             </li>
             
             <li class="menu-item">
-                <a href="employees.php" class="menu-link <?php echo isActiveMenu('employees', $currentPage) ? 'active' : ''; ?>" data-tooltip="Manage Employees">
+                <a href="<?php echo $basePath; ?>pages/employees/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/employees/') !== false) ? 'active' : ''; ?>" data-tooltip="Manage Employees">
                     <div class="menu-icon-wrapper">
                         <i class="fas fa-users menu-icon"></i>
                     </div>
@@ -68,7 +78,7 @@ function isActiveMenu($page, $currentPage, $currentDir = '') {
             </li>
 
             <li class="menu-item">
-                <a href="attendance.php" class="menu-link <?php echo isActiveMenu('attendance', $currentPage) ? 'active' : ''; ?>" data-tooltip="Attendance Management">
+                <a href="<?php echo $basePath; ?>pages/attendance/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/attendance/') !== false) ? 'active' : ''; ?>" data-tooltip="Attendance Management">
                     <div class="menu-icon-wrapper">
                         <i class="fas fa-clock menu-icon"></i>
                     </div>
@@ -86,7 +96,7 @@ function isActiveMenu($page, $currentPage, $currentDir = '') {
             </li>
 
             <li class="menu-item">
-                <a href="petty_cash.php" class="menu-link <?php echo isActiveMenu('petty_cash', $currentPage) ? 'active' : ''; ?>" data-tooltip="Petty Cash Requests">
+                <a href="<?php echo $basePath; ?>pages/petty_cash/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/petty_cash/') !== false) ? 'active' : ''; ?>" data-tooltip="Petty Cash Requests">
                     <div class="menu-icon-wrapper">
                         <i class="fas fa-wallet menu-icon"></i>
                     </div>
@@ -99,7 +109,7 @@ function isActiveMenu($page, $currentPage, $currentDir = '') {
             </li>
 
             <li class="menu-item">
-                <a href="salary.php" class="menu-link <?php echo isActiveMenu('salary', $currentPage) ? 'active' : ''; ?>" data-tooltip="Salary Management">
+                <a href="<?php echo $basePath; ?>pages/salary/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/salary/') !== false) ? 'active' : ''; ?>" data-tooltip="Salary Management">
                     <div class="menu-icon-wrapper">
                         <i class="fas fa-money-bill-wave menu-icon"></i>
                     </div>
@@ -117,7 +127,7 @@ function isActiveMenu($page, $currentPage, $currentDir = '') {
             </li>
 
             <li class="menu-item">
-                <a href="tasks.php" class="menu-link <?php echo isActiveMenu('tasks', $currentPage) ? 'active' : ''; ?>" data-tooltip="Task Management">
+                <a href="<?php echo $basePath; ?>pages/tasks/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/tasks/') !== false) ? 'active' : ''; ?>" data-tooltip="Task Management">
                     <div class="menu-icon-wrapper">
                         <i class="fas fa-tasks menu-icon"></i>
                     </div>
@@ -127,7 +137,7 @@ function isActiveMenu($page, $currentPage, $currentDir = '') {
             </li>
 
             <li class="menu-item">
-                <a href="reports.php" class="menu-link <?php echo isActiveMenu('reports', $currentPage) ? 'active' : ''; ?>" data-tooltip="Reports & Analytics">
+                <a href="<?php echo $basePath; ?>pages/reports/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/reports/') !== false) ? 'active' : ''; ?>" data-tooltip="Reports & Analytics">
                     <div class="menu-icon-wrapper">
                         <i class="fas fa-chart-bar menu-icon"></i>
                     </div>
@@ -145,7 +155,7 @@ function isActiveMenu($page, $currentPage, $currentDir = '') {
             </li>
 
             <li class="menu-item">
-                <a href="settings.php" class="menu-link <?php echo isActiveMenu('settings', $currentPage) ? 'active' : ''; ?>" data-tooltip="System Settings">
+                <a href="<?php echo $basePath; ?>pages/settings/departments.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/settings/') !== false) ? 'active' : ''; ?>" data-tooltip="System Settings">
                     <div class="menu-icon-wrapper">
                         <i class="fas fa-cog menu-icon"></i>
                     </div>
@@ -468,8 +478,8 @@ function isActiveMenu($page, $currentPage, $currentDir = '') {
         display: flex;
         flex-direction: column;
         gap: 0.25rem;
-    }
-    
+        }
+        
     .stat-item {
         display: flex;
         align-items: center;
@@ -507,18 +517,18 @@ function isActiveMenu($page, $currentPage, $currentDir = '') {
         background: rgba(255, 255, 255, 0.2);
         color: var(--white);
         transform: translateY(-1px);
-    }
-    
-    .sidebar-overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-        backdrop-filter: blur(4px);
-        z-index: 99;
+        }
+        
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            z-index: 99;
     }
     
     /* Responsive Design */
@@ -608,29 +618,24 @@ function isActiveMenu($page, $currentPage, $currentDir = '') {
     });
     
     function initializeSidebarEnhancements() {
-        // Add stagger animation to menu items
+        // Add stagger animation to menu items without hiding them initially
         const menuItems = document.querySelectorAll('.menu-item');
         menuItems.forEach((item, index) => {
             item.style.animationDelay = `${index * 0.05}s`;
-            item.style.opacity = '0';
+            // Remove the opacity: 0 so items are visible from start
             item.style.animation = 'slideInLeft 0.6s ease forwards';
         });
     }
     
     function loadMenuCounts() {
-        // Load employee count - Updated to use correct API path
-        fetch('api/get_stats.php') // Changed from get_counts.php to get_stats.php
-            .then(response => response.json())
-            .then(data => {
-                updateMenuCount('employeeCount', data.employees || 0);
-                updateMenuCount('pettyRequestCount', data.pending_requests || 0);
-            })
-            .catch(error => {
-                // Fallback - set default values if API doesn't exist
-                updateMenuCount('employeeCount', 0);
-                updateMenuCount('pettyRequestCount', 0);
-                console.log('Could not load menu counts:', error);
-            });
+        // Create a simple API endpoint to get stats or use dummy data for now
+        try {
+            // You can replace this with actual API call to get counts
+            updateMenuCount('employeeCount', 0);
+            updateMenuCount('pettyRequestCount', 0);
+        } catch (error) {
+            console.log('Could not load menu counts:', error);
+        }
     }
     
     function updateMenuCount(elementId, count) {
