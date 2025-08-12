@@ -20,7 +20,12 @@ try {
         SELECT e.*, 
                d.name as department_name,
                s.name as shift_name,
-               st.name as site_name
+               s.start_time,
+               s.end_time,
+               st.name as site_name,
+               st.address as site_address,
+               st.latitude as site_latitude,
+               st.longitude as site_longitude
         FROM employees e
         LEFT JOIN departments d ON e.department_id = d.id
         LEFT JOIN shifts s ON e.shift_id = s.id
@@ -40,19 +45,73 @@ try {
         sendError('Invalid employee code or password', 401);
     }
     
-    // Create simple token (employee_id:password_hash encoded in base64)
-    // In production, use JWT or proper session tokens
-    $token = base64_encode($employee['id'] . ':' . $password);
+    // Generate proper token using the existing generateEmployeeToken function
+    $token = generateEmployeeToken($employee['id'], $employee['password']);
+    
+    // Get today's attendance
+    $stmt = $pdo->prepare("
+        SELECT * FROM attendance 
+        WHERE employee_id = ? AND date = CURDATE()
+    ");
+    $stmt->execute([$employee['id']]);
+    $today_attendance = $stmt->fetch();
+    
+    // Get monthly stats
+    $stmt = $pdo->prepare("
+        SELECT 
+            COUNT(*) as total_days,
+            SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_days,
+            SUM(working_hours) as total_hours
+        FROM attendance 
+        WHERE employee_id = ? AND MONTH(date) = MONTH(CURDATE()) AND YEAR(date) = YEAR(CURDATE())
+    ");
+    $stmt->execute([$employee['id']]);
+    $monthly_stats = $stmt->fetch();
+    
+    // Get pending petty cash count
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) as pending_count
+        FROM petty_cash_requests 
+        WHERE employee_id = ? AND status = 'pending'
+    ");
+    $stmt->execute([$employee['id']]);
+    $pending_petty_cash = $stmt->fetchColumn();
+    
+    // Get active tasks count
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) as active_count
+        FROM tasks 
+        WHERE employee_id = ? AND status IN ('active', 'in_progress')
+    ");
+    $stmt->execute([$employee['id']]);
+    $active_tasks = $stmt->fetchColumn();
     
     // Remove sensitive data
     unset($employee['password']);
     
-    sendSuccess('Login successful', [
+    // Prepare response data
+    $response_data = [
         'employee' => $employee,
-        'token' => $token
-    ]);
+        'token' => $token,
+        'today_attendance' => $today_attendance ?: null,
+        'monthly_stats' => [
+            'total_days' => (int)($monthly_stats['total_days'] ?? 0),
+            'approved_days' => (int)($monthly_stats['approved_days'] ?? 0),
+            'total_hours' => (float)($monthly_stats['total_hours'] ?? 0)
+        ],
+        'pending_petty_cash' => (int)$pending_petty_cash,
+        'active_tasks' => (int)$active_tasks,
+        'permissions' => [
+            'can_checkin' => true,
+            'can_checkout' => true,
+            'can_create_task' => true
+        ]
+    ];
+    
+    sendSuccess('Login successful', $response_data);
     
 } catch (PDOException $e) {
+    error_log("Login error: " . $e->getMessage());
     sendError('Database error occurred', 500);
 }
 ?>

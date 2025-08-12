@@ -88,6 +88,7 @@ function verifyEmployeeToken($pdo, $token) {
             }
         }
     } catch (Exception $e) {
+        error_log("Token verification error: " . $e->getMessage());
         return false;
     }
     
@@ -100,93 +101,77 @@ function generateEmployeeToken($employee_id, $password_hash) {
     return base64_encode($employee_id . ':' . $timestamp . ':' . $hash);
 }
 
-function uploadBase64Image($base64_string, $upload_dir, $allowed_types = ['jpg', 'jpeg', 'png']) {
-    if (empty($base64_string)) {
-        return null;
+// Log activity function
+function logActivity($pdo, $employee_id, $action, $details = null) {
+    try {
+        // Check if activity_logs table exists first
+        $stmt = $pdo->query("SHOW TABLES LIKE 'activity_logs'");
+        if ($stmt->rowCount() > 0) {
+            $stmt = $pdo->prepare("
+                INSERT INTO activity_logs (employee_id, action, details, created_at) 
+                VALUES (?, ?, ?, NOW())
+            ");
+            $stmt->execute([$employee_id, $action, $details]);
+        } else {
+            // Just log to error log if table doesn't exist
+            error_log("Activity: Employee $employee_id - $action - $details");
+        }
+    } catch (PDOException $e) {
+        error_log("Activity log error: " . $e->getMessage());
+        // Don't throw error, just log it
+    }
+}
+
+// Check if user has permission
+function hasPermission($user, $permission) {
+    if ($user['role'] === 'superadmin') {
+        return true;
     }
     
-    // Remove data:image/jpeg;base64, prefix if present
-    if (strpos($base64_string, 'data:image') === 0) {
-        $base64_string = substr($base64_string, strpos($base64_string, ',') + 1);
-    }
-    
-    $image_data = base64_decode($base64_string);
-    if ($image_data === false) {
-        return null;
-    }
-    
-    // Validate image
-    $temp_file = tempnam(sys_get_temp_dir(), 'upload');
-    file_put_contents($temp_file, $image_data);
-    
-    $image_info = getimagesize($temp_file);
-    if ($image_info === false) {
-        unlink($temp_file);
-        return null;
-    }
-    
-    // Check file type
-    $mime_to_ext = [
-        'image/jpeg' => 'jpg',
-        'image/jpg' => 'jpg',
-        'image/png' => 'png'
+    // Define role permissions
+    $permissions = [
+        'admin' => [
+            'view_employees',
+            'add_employee', 
+            'edit_employee',
+            'view_attendance',
+            'manage_attendance',
+            'view_reports',
+            'manage_petty_cash',
+            'view_salary'
+        ],
+        'hr' => [
+            'view_employees',
+            'add_employee',
+            'edit_employee', 
+            'view_attendance',
+            'view_reports',
+            'manage_petty_cash'
+        ],
+        'manager' => [
+            'view_employees',
+            'view_attendance',
+            'view_reports'
+        ]
     ];
     
-    $extension = $mime_to_ext[$image_info['mime']] ?? null;
-    if (!$extension || !in_array($extension, $allowed_types)) {
-        unlink($temp_file);
-        return null;
-    }
-    
-    // Create directory if it doesn't exist
-    if (!file_exists($upload_dir)) {
-        mkdir($upload_dir, 0755, true);
-    }
-    
-    $filename = uniqid() . '_' . time() . '.' . $extension;
-    $file_path = $upload_dir . $filename;
-    
-    if (rename($temp_file, $file_path)) {
-        return $filename;
-    }
-    
-    unlink($temp_file);
-    return null;
+    $userPermissions = $permissions[$user['role']] ?? [];
+    return in_array($permission, $userPermissions);
 }
 
-function calculateDistance($lat1, $lon1, $lat2, $lon2) {
-    $earth_radius = 6371000; // meters
-    
-    $lat1_rad = deg2rad($lat1);
-    $lon1_rad = deg2rad($lon1);
-    $lat2_rad = deg2rad($lat2);
-    $lon2_rad = deg2rad($lon2);
-    
-    $delta_lat = $lat2_rad - $lat1_rad;
-    $delta_lon = $lon2_rad - $lon1_rad;
-    
-    $a = sin($delta_lat/2) * sin($delta_lat/2) + cos($lat1_rad) * cos($lat2_rad) * sin($delta_lon/2) * sin($delta_lon/2);
-    $c = 2 * atan2(sqrt($a), sqrt(1-$a));
-    
-    return $earth_radius * $c;
-}
-
-function logActivity($pdo, $employee_id, $action, $details = '') {
-    try {
-        $stmt = $pdo->prepare("
-            INSERT INTO activity_logs (employee_id, action, details, ip_address, user_agent, created_at) 
-            VALUES (?, ?, ?, ?, ?, NOW())
-        ");
-        $stmt->execute([
-            $employee_id,
-            $action,
-            $details,
-            $_SERVER['REMOTE_ADDR'] ?? '',
-            $_SERVER['HTTP_USER_AGENT'] ?? ''
-        ]);
-    } catch (Exception $e) {
-        // Log error but don't fail the main operation
-        error_log("Failed to log activity: " . $e->getMessage());
+// Validate employee permissions for mobile app
+function validateEmployeePermission($employee, $action) {
+    // Basic permission checks for employee actions
+    switch ($action) {
+        case 'checkin':
+        case 'checkout':
+            return $employee['status'] === 'active';
+        case 'create_task':
+            return $employee['status'] === 'active';
+        case 'petty_cash_request':
+            return $employee['status'] === 'active';
+        default:
+            return false;
     }
 }
 ?>
