@@ -26,7 +26,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Page Not Found - EMS Pro</title>
+    <title>Page Not Found - Maa Group</title>
     
     <!-- Enhanced CSS -->
     <link rel="stylesheet" href="assets/css/style.css">
