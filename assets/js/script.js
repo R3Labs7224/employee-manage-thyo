@@ -1117,5 +1117,4 @@ window.EMS = {
     throttle
 };
 
-// Initialize performance monitoring
-console.log('Enhanced EMS JavaScript loaded successfully');
+

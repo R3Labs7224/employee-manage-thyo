@@ -33,8 +33,8 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                 <i class="fas fa-building"></i>
             </div>
             <h3 class="logo-text">
-                <span class="logo-main">EMS</span>
-                <span class="logo-sub">Pro</span>
+                <span class="logo-main">Maa Group</span>
+
             </h3>
         </div>
         <div class="sidebar-version">

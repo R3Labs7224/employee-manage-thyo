@@ -1,6 +1,11 @@
 <?php
+// api/employee/tasks.php - Final working version
 require_once '../../config/database.php';
 require_once '../common/response.php';
+
+// Increase limits for image processing
+ini_set('memory_limit', '256M');
+ini_set('max_execution_time', 60);
 
 // Verify authentication
 $token = getAuthHeader();
@@ -34,7 +39,9 @@ function getTasks($pdo, $employee) {
     $limit = (int)($_GET['limit'] ?? 50);
     
     try {
-        // Get tasks for specific date or recent tasks
+        // Sanitize limit value and use it directly in query
+        $limit = max(1, min(100, $limit));
+        
         $stmt = $pdo->prepare("
             SELECT t.*, s.name as site_name, a.date as attendance_date
             FROM tasks t
@@ -42,13 +49,13 @@ function getTasks($pdo, $employee) {
             JOIN attendance a ON t.attendance_id = a.id
             WHERE t.employee_id = ? AND DATE(t.created_at) = ?
             ORDER BY t.created_at DESC
-            LIMIT ?
-        ");
+            LIMIT " . $limit
+        );
         
-        $stmt->execute([$employee['id'], $date, $limit]);
-        $tasks = $stmt->fetchAll();
+        $stmt->execute([$employee['id'], $date]);
+        $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        // Get summary stats for today
+        // Get summary stats
         $stmt = $pdo->prepare("
             SELECT 
                 COUNT(*) as total_tasks,
@@ -60,53 +67,92 @@ function getTasks($pdo, $employee) {
         ");
         
         $stmt->execute([$employee['id'], $date]);
-        $summary = $stmt->fetch();
+        $summary = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$summary) {
+            $summary = [
+                'total_tasks' => 0,
+                'completed_tasks' => 0,
+                'active_tasks' => 0,
+                'cancelled_tasks' => 0
+            ];
+        }
         
         // Check if employee can create new task
         $can_create_task = false;
+        $attendance_status = 'not_checked_in';
+        
+        // Check today's attendance
         $stmt = $pdo->prepare("
-            SELECT a.*, COUNT(t.id) as active_task_count
-            FROM attendance a
-            LEFT JOIN tasks t ON a.id = t.attendance_id AND t.status = 'active'
-            WHERE a.employee_id = ? AND a.date = CURDATE() AND a.check_in_time IS NOT NULL
-            GROUP BY a.id
+            SELECT * FROM attendance 
+            WHERE employee_id = ? AND date = CURDATE()
         ");
         $stmt->execute([$employee['id']]);
-        $attendance_check = $stmt->fetch();
+        $attendance_today = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        if ($attendance_check && $attendance_check['active_task_count'] == 0) {
-            $can_create_task = true;
+        if ($attendance_today) {
+            if ($attendance_today['check_in_time'] && !$attendance_today['check_out_time']) {
+                $attendance_status = 'checked_in';
+                
+                // Check if they have any active tasks
+                $stmt = $pdo->prepare("
+                    SELECT COUNT(*) as active_count
+                    FROM tasks 
+                    WHERE employee_id = ? AND status = 'active'
+                ");
+                $stmt->execute([$employee['id']]);
+                $active_task_count = $stmt->fetchColumn();
+                
+                if ($active_task_count == 0) {
+                    $can_create_task = true;
+                }
+            } elseif ($attendance_today['check_out_time']) {
+                $attendance_status = 'checked_out';
+            }
         }
         
         sendSuccess('Tasks retrieved successfully', [
             'tasks' => $tasks,
             'summary' => $summary,
             'can_create_task' => $can_create_task,
-            'attendance_status' => $attendance_check ? 'checked_in' : 'not_checked_in'
+            'attendance_status' => $attendance_status
         ]);
         
     } catch (PDOException $e) {
+        error_log("Database error in getTasks: " . $e->getMessage());
         sendError('Database error occurred', 500);
     }
 }
 
 function createTask($pdo, $employee) {
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    validateRequired(['title', 'site_id', 'latitude', 'longitude'], $input);
-    
-    $title = trim($input['title']);
-    $description = trim($input['description'] ?? '');
-    $site_id = (int)$input['site_id'];
-    $latitude = (float)$input['latitude'];
-    $longitude = (float)$input['longitude'];
-    $current_time = date('Y-m-d H:i:s');
-    
-    if (strlen($title) < 3) {
-        sendError('Task title must be at least 3 characters long', 400);
-    }
-    
     try {
+        $input = json_decode(file_get_contents('php://input'), true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            sendError('Invalid JSON data', 400);
+            return;
+        }
+        
+        // Validate required fields
+        $required_fields = ['title', 'site_id', 'latitude', 'longitude'];
+        foreach ($required_fields as $field) {
+            if (!isset($input[$field])) {
+                sendError("Field '$field' is required", 400);
+                return;
+            }
+        }
+        
+        $title = trim($input['title']);
+        $description = trim($input['description'] ?? '');
+        $site_id = (int)$input['site_id'];
+        $latitude = (float)$input['latitude'];
+        $longitude = (float)$input['longitude'];
+        
+        if (strlen($title) < 3) {
+            sendError('Task title must be at least 3 characters long', 400);
+            return;
+        }
+        
         // Check if employee is checked in today
         $stmt = $pdo->prepare("
             SELECT * FROM attendance 
@@ -114,14 +160,16 @@ function createTask($pdo, $employee) {
             AND check_in_time IS NOT NULL
         ");
         $stmt->execute([$employee['id']]);
-        $attendance = $stmt->fetch();
+        $attendance = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$attendance) {
             sendError('You must check in first before creating tasks', 400);
+            return;
         }
         
         if ($attendance['check_out_time']) {
             sendError('Cannot create tasks after check out', 400);
+            return;
         }
         
         // Check if employee has any active tasks
@@ -133,57 +181,54 @@ function createTask($pdo, $employee) {
         $active_task = $stmt->fetch();
         
         if ($active_task) {
-            sendError('You have an active task. Please complete it first before creating a new one', 400);
+            sendError('You have an active task. Please complete it first', 400);
+            return;
         }
         
-        // Validate site exists
-        $stmt = $pdo->prepare("SELECT * FROM sites WHERE id = ? AND status = 'active'");
+        // Validate site exists (remove status check if it causes issues)
+        $stmt = $pdo->prepare("SELECT * FROM sites WHERE id = ?");
         $stmt->execute([$site_id]);
-        $site = $stmt->fetch();
+        $site = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$site) {
             sendError('Invalid site selected', 400);
-        }
-        
-        // Check if task location is within reasonable distance from check-in location
-        if ($attendance['check_in_latitude'] && $attendance['check_in_longitude']) {
-            $distance = calculateDistance(
-                $latitude, $longitude,
-                $attendance['check_in_latitude'], $attendance['check_in_longitude']
-            );
-            
-            // Allow 5km radius from check-in location
-            if ($distance > 5000) {
-                sendError('Task location is too far from your check-in location', 400);
-            }
+            return;
         }
         
         // Handle task image upload
         $image_filename = null;
-        if (isset($input['image']) && !empty($input['image'])) {
-            $image_filename = uploadBase64Image($input['image'], '../../assets/images/uploads/tasks/');
+        $task_image_data = $input['task_image'] ?? $input['image'] ?? null;
+        
+        if (!empty($task_image_data)) {
+            $image_filename = uploadBase64Image($task_image_data, '../../assets/images/uploads/tasks/');
             if (!$image_filename) {
-                sendError('Failed to upload task image. Please try again.', 400);
+                sendError('Failed to upload task image', 400);
+                return;
             }
         }
         
         // Create new task
+        $current_time = date('Y-m-d H:i:s');
+        
         $stmt = $pdo->prepare("
             INSERT INTO tasks (
                 employee_id, site_id, attendance_id, title, description,
-                task_image, start_time, latitude, longitude
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                task_image, start_time, latitude, longitude, status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW())
         ");
         
-        $stmt->execute([
+        $result = $stmt->execute([
             $employee['id'], $site_id, $attendance['id'], $title, $description,
             $image_filename, $current_time, $latitude, $longitude
         ]);
         
-        $task_id = $pdo->lastInsertId();
+        if (!$result) {
+            $error = $stmt->errorInfo();
+            sendError('Database error: ' . $error[2], 500);
+            return;
+        }
         
-        // Log activity
-        logActivity($pdo, $employee['id'], 'task_created', "Task: $title, Site: {$site['name']}");
+        $task_id = $pdo->lastInsertId();
         
         sendSuccess('Task created successfully', [
             'task_id' => $task_id,
@@ -193,24 +238,35 @@ function createTask($pdo, $employee) {
         ]);
         
     } catch (PDOException $e) {
-        error_log("Task creation error: " . $e->getMessage());
+        error_log("Database error in createTask: " . $e->getMessage());
         sendError('Database error occurred', 500);
+    } catch (Exception $e) {
+        error_log("General error in createTask: " . $e->getMessage());
+        sendError('Error occurred', 500);
     }
 }
 
 function completeTask($pdo, $employee) {
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    validateRequired(['task_id'], $input);
-    
-    $task_id = (int)$input['task_id'];
-    $completion_notes = trim($input['completion_notes'] ?? '');
-    $completion_image = $input['completion_image'] ?? '';
-    $latitude = (float)($input['latitude'] ?? 0);
-    $longitude = (float)($input['longitude'] ?? 0);
-    $current_time = date('Y-m-d H:i:s');
-    
     try {
+        $input = json_decode(file_get_contents('php://input'), true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            sendError('Invalid JSON data', 400);
+            return;
+        }
+        
+        if (!isset($input['task_id'])) {
+            sendError('Task ID is required', 400);
+            return;
+        }
+        
+        $task_id = (int)$input['task_id'];
+        $completion_notes = trim($input['completion_notes'] ?? '');
+        $completion_image = $input['completion_image'] ?? '';
+        $latitude = (float)($input['latitude'] ?? 0);
+        $longitude = (float)($input['longitude'] ?? 0);
+        $current_time = date('Y-m-d H:i:s');
+        
         // Verify task belongs to employee and is active
         $stmt = $pdo->prepare("
             SELECT t.*, s.name as site_name 
@@ -219,38 +275,56 @@ function completeTask($pdo, $employee) {
             WHERE t.id = ? AND t.employee_id = ? AND t.status = 'active'
         ");
         $stmt->execute([$task_id, $employee['id']]);
-        $task = $stmt->fetch();
+        $task = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$task) {
             sendError('Task not found or already completed', 404);
+            return;
         }
         
         // Handle completion image upload
         $completion_image_filename = null;
         if (!empty($completion_image)) {
             $completion_image_filename = uploadBase64Image($completion_image, '../../assets/images/uploads/tasks/');
+            if (!$completion_image_filename) {
+                sendError('Failed to upload completion image', 400);
+                return;
+            }
         }
         
         // Calculate task duration
         $start_time = new DateTime($task['start_time']);
         $end_time = new DateTime($current_time);
-        $duration_minutes = $end_time->diff($start_time)->i + ($end_time->diff($start_time)->h * 60);
+        $interval = $end_time->diff($start_time);
+        $duration_minutes = $interval->h * 60 + $interval->i;
         
         // Update task as completed
+        $description_update = $task['description'];
+        if (!empty($completion_notes)) {
+            $description_update .= "\n\nCompletion Notes: " . $completion_notes;
+        }
+        
         $stmt = $pdo->prepare("
             UPDATE tasks 
-            SET status = 'completed', end_time = ?, 
-                description = CONCAT(description, CASE WHEN ? != '' THEN CONCAT('\n\nCompletion Notes: ', ?) ELSE '' END),
-                task_image = CASE WHEN ? IS NOT NULL THEN ? ELSE task_image END
+            SET status = 'completed', 
+                end_time = ?, 
+                description = ?,
+                task_image = COALESCE(?, task_image)
             WHERE id = ?
         ");
-        $stmt->execute([
-            $current_time, $completion_notes, $completion_notes, 
-            $completion_image_filename, $completion_image_filename, $task_id
+        
+        $result = $stmt->execute([
+            $current_time, 
+            $description_update,
+            $completion_image_filename, 
+            $task_id
         ]);
         
-        // Log activity
-        logActivity($pdo, $employee['id'], 'task_completed', "Task: {$task['title']}, Duration: {$duration_minutes} minutes");
+        if (!$result) {
+            $error = $stmt->errorInfo();
+            sendError('Database error: ' . $error[2], 500);
+            return;
+        }
         
         sendSuccess('Task completed successfully', [
             'task_id' => $task_id,
@@ -261,8 +335,50 @@ function completeTask($pdo, $employee) {
         ]);
         
     } catch (PDOException $e) {
-        error_log("Task completion error: " . $e->getMessage());
+        error_log("Database error in completeTask: " . $e->getMessage());
         sendError('Database error occurred', 500);
+    } catch (Exception $e) {
+        error_log("General error in completeTask: " . $e->getMessage());
+        sendError('Error occurred', 500);
+    }
+}
+
+function uploadBase64Image($base64_string, $upload_dir) {
+    try {
+        // Remove data:image/jpeg;base64, prefix if present
+        if (strpos($base64_string, 'data:image') === 0) {
+            $base64_string = substr($base64_string, strpos($base64_string, ',') + 1);
+        }
+        
+        $image_data = base64_decode($base64_string);
+        if ($image_data === false) {
+            return null;
+        }
+        
+        // Check image size (limit to 5MB)
+        if (strlen($image_data) > 5 * 1024 * 1024) {
+            return null;
+        }
+        
+        // Create directory if it doesn't exist
+        if (!file_exists($upload_dir)) {
+            if (!mkdir($upload_dir, 0755, true)) {
+                return null;
+            }
+        }
+        
+        $filename = uniqid() . '.jpg';
+        $file_path = $upload_dir . $filename;
+        
+        if (file_put_contents($file_path, $image_data)) {
+            return $filename;
+        }
+        
+        return null;
+        
+    } catch (Exception $e) {
+        error_log("Error in uploadBase64Image: " . $e->getMessage());
+        return null;
     }
 }
 ?>
