@@ -1,5 +1,5 @@
 <?php
-// api/employee/tasks.php - Complete working version with uploadBase64Image function
+// api/employee/tasks.php - FINAL FIXED VERSION with start_time handling
 require_once '../../config/database.php';
 require_once '../common/response.php';
 
@@ -142,6 +142,9 @@ function createTask($pdo, $employee) {
             return;
         }
         
+        // Log incoming request for debugging
+        error_log("Create Task Request from Employee ID {$employee['id']}: " . json_encode(array_merge($input, ['image' => isset($input['image']) ? 'BASE64_DATA_PRESENT' : 'NO_IMAGE'])));
+        
         // Validate required fields
         $required_fields = ['title', 'site_id', 'latitude', 'longitude'];
         foreach ($required_fields as $field) {
@@ -204,18 +207,25 @@ function createTask($pdo, $employee) {
         if (isset($input['image']) && !empty($input['image'])) {
             try {
                 $image_filename = uploadBase64Image($input['image'], '../../assets/images/uploads/tasks/');
+                if (!$image_filename) {
+                    sendError('Failed to process uploaded image', 400);
+                    return;
+                }
+                error_log("Image uploaded successfully: $image_filename");
             } catch (Exception $e) {
+                error_log("Image upload error: " . $e->getMessage());
                 sendError('Failed to upload image: ' . $e->getMessage(), 400);
                 return;
             }
         }
         
-        // Create the task
+        // FIXED: Create the task with proper start_time handling
+        // Set start_time to NOW() when task is created (when it becomes active)
         $stmt = $pdo->prepare("
             INSERT INTO tasks (
                 employee_id, attendance_id, site_id, title, description, 
-                latitude, longitude, image, status, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW())
+                latitude, longitude, task_image, status, start_time, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW(), NOW())
         ");
         
         $stmt->execute([
@@ -241,11 +251,17 @@ function createTask($pdo, $employee) {
         $stmt->execute([$task_id]);
         $task = $stmt->fetch(PDO::FETCH_ASSOC);
         
+        // Log successful creation
+        error_log("Task created successfully - ID: $task_id, Employee: {$employee['id']}, Title: $title, Image: " . ($image_filename ? $image_filename : 'none'));
+        
         sendSuccess('Task created successfully', $task);
         
     } catch (PDOException $e) {
         error_log("Database error in createTask: " . $e->getMessage());
-        sendError('Database error occurred', 500);
+        sendError('Database error occurred: ' . $e->getMessage(), 500);
+    } catch (Exception $e) {
+        error_log("General error in createTask: " . $e->getMessage());
+        sendError('An error occurred: ' . $e->getMessage(), 500);
     }
 }
 
@@ -296,14 +312,19 @@ function completeTask($pdo, $employee) {
             return;
         }
         
-        
         $completion_image = null;
         if (isset($input['completion_image']) && !empty($input['completion_image'])) {
-            // Use same directory as tasks creation (works like attendance)
-            $completion_image = uploadBase64Image($input['completion_image'], '../../assets/images/uploads/tasks/');
+            try {
+                $completion_image = uploadBase64Image($input['completion_image'], '../../assets/images/uploads/tasks/');
+            } catch (Exception $e) {
+                error_log("Completion image upload error: " . $e->getMessage());
+                sendError('Failed to upload completion image: ' . $e->getMessage(), 400);
+                return;
+            }
         }
         
-        // Update task status to completed
+        // FIXED: Update task with proper end_time handling
+        // Set end_time to NOW() when task is completed
         $stmt = $pdo->prepare("
             UPDATE tasks 
             SET status = 'completed', 
@@ -311,6 +332,7 @@ function completeTask($pdo, $employee) {
                 completion_latitude = ?, 
                 completion_longitude = ?, 
                 completion_image = ?,
+                end_time = NOW(),
                 completed_at = NOW()
             WHERE id = ?
         ");
@@ -341,31 +363,99 @@ function completeTask($pdo, $employee) {
     }
 }
 
-// MISSING FUNCTION - This was causing the 500 error!
+/**
+ * ENHANCED IMAGE UPLOAD FUNCTION
+ * With better error handling, directory creation, and file permissions
+ */
 function uploadBase64Image($base64_string, $upload_dir) {
-    // Remove data:image/jpeg;base64, prefix if present
-    if (strpos($base64_string, 'data:image') === 0) {
-        $base64_string = substr($base64_string, strpos($base64_string, ',') + 1);
-    }
-    
-    $image_data = base64_decode($base64_string);
-    if ($image_data === false) {
-        return null;
-    }
-    
-    // Create directory if it doesn't exist
-    if (!file_exists($upload_dir)) {
-        mkdir($upload_dir, 0755, true);
-    }
-    
-    $filename = uniqid() . '.jpg';
-    $file_path = $upload_dir . $filename;
-    
-    if (file_put_contents($file_path, $image_data)) {
+    try {
+        // Validate input
+        if (empty($base64_string)) {
+            throw new Exception('Empty base64 string provided');
+        }
+        
+        error_log("Starting image upload to directory: $upload_dir");
+        
+        // Remove data:image/jpeg;base64, prefix if present
+        if (strpos($base64_string, 'data:image') === 0) {
+            $comma_pos = strpos($base64_string, ',');
+            if ($comma_pos === false) {
+                throw new Exception('Invalid base64 format - missing comma separator');
+            }
+            $base64_string = substr($base64_string, $comma_pos + 1);
+        }
+        
+        // Decode base64
+        $image_data = base64_decode($base64_string, true);
+        if ($image_data === false) {
+            throw new Exception('Invalid base64 image data - decode failed');
+        }
+        
+        $image_size = strlen($image_data);
+        error_log("Decoded image size: $image_size bytes");
+        
+        // Validate image size (max 10MB)
+        if ($image_size > 10 * 1024 * 1024) {
+            throw new Exception('Image too large - maximum 10MB allowed');
+        }
+        
+        if ($image_size < 100) {
+            throw new Exception('Image too small - minimum 100 bytes required');
+        }
+        
+        // Get absolute path
+        $abs_upload_dir = realpath(dirname(__FILE__)) . '/' . $upload_dir;
+        error_log("Absolute upload directory: $abs_upload_dir");
+        
+        // Create directory if it doesn't exist
+        if (!file_exists($abs_upload_dir)) {
+            error_log("Creating directory: $abs_upload_dir");
+            if (!mkdir($abs_upload_dir, 0755, true)) {
+                throw new Exception('Failed to create upload directory: ' . $abs_upload_dir);
+            }
+        }
+        
+        // Check if directory is writable
+        if (!is_writable($abs_upload_dir)) {
+            error_log("Directory not writable, attempting to fix permissions: $abs_upload_dir");
+            if (!chmod($abs_upload_dir, 0755)) {
+                throw new Exception('Upload directory is not writable and cannot fix permissions: ' . $abs_upload_dir);
+            }
+        }
+        
+        // Generate unique filename
+        $filename = 'task_' . uniqid() . '_' . time() . '.jpg';
+        $file_path = $abs_upload_dir . $filename;
+        
+        error_log("Attempting to save file: $file_path");
+        
+        // Save the file
+        $bytes_written = file_put_contents($file_path, $image_data);
+        if ($bytes_written === false) {
+            throw new Exception('Failed to write image file to disk');
+        }
+        
+        error_log("File saved successfully: $filename ($bytes_written bytes)");
+        
+        // Verify file was created and has correct size
+        if (!file_exists($file_path)) {
+            throw new Exception('File was not created successfully');
+        }
+        
+        $saved_size = filesize($file_path);
+        if ($saved_size !== $image_size) {
+            error_log("Warning: File size mismatch - expected: $image_size, saved: $saved_size");
+        }
+        
+        // Set proper file permissions
+        chmod($file_path, 0644);
+        
         return $filename;
+        
+    } catch (Exception $e) {
+        error_log("Image upload error: " . $e->getMessage());
+        throw $e;
     }
-    
-    return null;
 }
 
 ?>

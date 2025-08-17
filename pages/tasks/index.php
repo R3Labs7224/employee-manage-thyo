@@ -72,27 +72,29 @@ try {
         JOIN sites s ON t.site_id = s.id
         WHERE " . implode(' AND ', $where_conditions) . "
         ORDER BY t.created_at DESC
+        LIMIT 100
     ";
     
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
-    $tasks = $stmt->fetchAll();
+    $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Get employees for filter dropdown
-    $employees_stmt = $pdo->query("SELECT id, name, employee_code FROM employees WHERE status = 'active' ORDER BY name");
-    $employees = $employees_stmt->fetchAll();
+    // Get employees for filter
+    $stmt = $pdo->query("SELECT id, name, employee_code FROM employees WHERE status = 'active' ORDER BY name");
+    $employees = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Get sites for filter dropdown
-    $sites_stmt = $pdo->query("SELECT id, name FROM sites WHERE status = 'active' ORDER BY name");
-    $sites = $sites_stmt->fetchAll();
+    // Get sites for filter
+    $stmt = $pdo->query("SELECT id, name FROM sites WHERE status = 'active' ORDER BY name");
+    $sites = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
 } catch (PDOException $e) {
+    $message = '<div class="alert alert-error">Error fetching tasks data.</div>';
     $tasks = [];
     $employees = [];
     $sites = [];
-    $message = '<div class="alert alert-error">Error fetching tasks.</div>';
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -103,55 +105,62 @@ try {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
-    <div class="dashboard-container">
+    <div class="wrapper">
         <?php include '../../components/sidebar.php'; ?>
         
         <div class="main-content">
             <?php include '../../components/header.php'; ?>
             
             <div class="content">
-                <?php echo $message; ?>
+                
+                
+                <?php if ($message): ?>
+                    <?php echo $message; ?>
+                <?php endif; ?>
                 
                 <!-- Filters -->
-                <div class="card" style="margin-bottom: 1rem;">
-                    <div class="card-body" style="padding: 1rem;">
-                        <form method="GET" action="">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Filters</h3>
+                    </div>
+                    <div class="card-body">
+                        <form method="GET" action="index.php">
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: end;">
-                                <div class="form-group" style="margin-bottom: 0;">
-                                    <label for="date">Date</label>
-                                    <input type="date" id="date" name="date" class="form-control" 
+                                <div>
+                                    <label>Date:</label>
+                                    <input type="date" name="date" class="form-control" 
                                            value="<?php echo htmlspecialchars($date_filter); ?>">
                                 </div>
                                 
-                                <div class="form-group" style="margin-bottom: 0;">
-                                    <label for="employee">Employee</label>
-                                    <select id="employee" name="employee" class="form-control">
+                                <div>
+                                    <label>Employee:</label>
+                                    <select name="employee" class="form-control">
                                         <option value="">All Employees</option>
                                         <?php foreach ($employees as $emp): ?>
-                                        <option value="<?php echo $emp['id']; ?>" 
-                                                <?php echo $employee_filter == $emp['id'] ? 'selected' : ''; ?>>
-                                            <?php echo htmlspecialchars($emp['employee_code'] . ' - ' . $emp['name']); ?>
-                                        </option>
+                                            <option value="<?php echo $emp['id']; ?>" 
+                                                    <?php echo $employee_filter == $emp['id'] ? 'selected' : ''; ?>>
+                                                <?php echo htmlspecialchars($emp['employee_code'] . ' - ' . $emp['name']); ?>
+                                            </option>
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
                                 
-                                <div class="form-group" style="margin-bottom: 0;">
-                                    <label for="site">Site</label>
-                                    <select id="site" name="site" class="form-control">
+                                <div>
+                                    <label>Site:</label>
+                                    <select name="site" class="form-control">
                                         <option value="">All Sites</option>
                                         <?php foreach ($sites as $site): ?>
-                                        <option value="<?php echo $site['id']; ?>" 
-                                                <?php echo $site_filter == $site['id'] ? 'selected' : ''; ?>>
-                                            <?php echo htmlspecialchars($site['name']); ?>
-                                        </option>
+                                            <option value="<?php echo $site['id']; ?>" 
+                                                    <?php echo $site_filter == $site['id'] ? 'selected' : ''; ?>>
+                                                <?php echo htmlspecialchars($site['name']); ?>
+                                            </option>
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
                                 
-                                <div class="form-group" style="margin-bottom: 0;">
-                                    <label for="status">Status</label>
-                                    <select id="status" name="status" class="form-control">
+                                <div>
+                                    <label>Status:</label>
+                                    <select name="status" class="form-control">
                                         <option value="">All Status</option>
                                         <option value="active" <?php echo $status_filter === 'active' ? 'selected' : ''; ?>>Active</option>
                                         <option value="completed" <?php echo $status_filter === 'completed' ? 'selected' : ''; ?>>Completed</option>
@@ -200,7 +209,8 @@ try {
                                             <th>Start Time</th>
                                             <th>Duration</th>
                                             <th>Status</th>
-                                            <th>Image</th>
+                                            <th>Start Image</th>
+                                            <th>Complete Image</th>
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
@@ -243,16 +253,35 @@ try {
                                                     <br><small style="color: #666;"><?php echo formatDate($task['end_time'], 'g:i A'); ?></small>
                                                 <?php endif; ?>
                                             </td>
+                                            
+                                            <!-- START IMAGE COLUMN -->
                                             <td>
                                                 <?php if ($task['task_image']): ?>
                                                     <a href="../../assets/images/uploads/tasks/<?php echo $task['task_image']; ?>" 
-                                                       target="_blank" class="btn" style="background: #17a2b8; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
-                                                        <i class="fas fa-image"></i> View
+                                                       target="_blank" class="btn" style="background: #28a745; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                                                        <i class="fas fa-image"></i> Start
                                                     </a>
                                                 <?php else: ?>
-                                                    <span style="color: #666;">No image</span>
+                                                    <span style="color: #666; font-size: 0.8rem;">No start image</span>
                                                 <?php endif; ?>
                                             </td>
+                                            
+                                            <!-- COMPLETE IMAGE COLUMN -->
+                                            <td>
+                                                <?php if ($task['completion_image']): ?>
+                                                    <a href="../../assets/images/uploads/tasks/<?php echo $task['completion_image']; ?>" 
+                                                       target="_blank" class="btn" style="background: #007bff; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                                                        <i class="fas fa-image"></i> Complete
+                                                    </a>
+                                                <?php else: ?>
+                                                    <?php if ($task['status'] === 'completed'): ?>
+                                                        <span style="color: #666; font-size: 0.8rem;">No complete image</span>
+                                                    <?php else: ?>
+                                                        <span style="color: #666; font-size: 0.8rem;">Task not completed</span>
+                                                    <?php endif; ?>
+                                                <?php endif; ?>
+                                            </td>
+                                            
                                             <td>
                                                 <?php if ($task['status'] === 'active' && hasPermission('supervisor')): ?>
                                                     <div style="display: flex; gap: 0.25rem;">
@@ -291,4 +320,6 @@ try {
         </div>
     </div>
 
-<?php include '../../components/footer.php'; ?>
+    <?php include '../../components/footer.php'; ?>
+</body>
+</html>
