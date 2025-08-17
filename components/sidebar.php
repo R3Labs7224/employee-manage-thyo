@@ -30,16 +30,14 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
     <div class="sidebar-header">
         <div class="logo-container">
             <div class="logo-icon">
-                <i class="fas fa-building"></i>
+                <img src="<?php echo $basePath; ?>assets/images/logo.png" alt="Maa Group Logo" style="width: 100%; height: 100%; object-fit: contain;">
             </div>
             <h3 class="logo-text">
                 <span class="logo-main">Maa Group</span>
 
             </h3>
         </div>
-        <div class="sidebar-version">
-            <span class="version-badge">v2.0</span>
-        </div>
+        
     </div>
 
     <!-- Enhanced Navigation Menu -->
@@ -249,7 +247,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
     .logo-icon {
         width: 45px;
         height: 45px;
-        background: rgba(255, 255, 255, 0.2);
+        background: white;
         backdrop-filter: blur(10px);
         border-radius: var(--radius-lg);
         display: flex;
@@ -259,6 +257,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
         color: var(--accent-amber);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         animation: float 3s ease-in-out infinite;
+        padding: 5px;
     }
     
     .logo-text {

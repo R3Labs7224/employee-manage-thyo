@@ -90,8 +90,14 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $pageTitle; ?> - Employee Management System</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="../../assets/images/logo.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../../assets/images/logo.png">
+    <link rel="shortcut icon" href="../../assets/images/logo.png">
+    <link rel="apple-touch-icon" href="../../assets/images/logo.png">
     <link rel="stylesheet" href="../../assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
     <div class="dashboard-container">
@@ -200,6 +206,12 @@ try {
                                                             <i class="fas fa-camera"></i> View Selfie
                                                         </a>
                                                     <?php endif; ?>
+                                                    <?php if ($record['check_in_latitude'] && $record['check_in_longitude']): ?>
+                                                        <br><a href="#" onclick="showLocationModal('checkin', <?php echo $record['check_in_latitude']; ?>, <?php echo $record['check_in_longitude']; ?>, '<?php echo htmlspecialchars($record['employee_name']); ?>', '<?php echo formatDate($record['check_in_time'], 'M d, Y g:i A'); ?>')" 
+                                                               style="font-size: 0.8rem; color: #28a745;">
+                                                            <i class="fas fa-map-marker-alt"></i> View Location on Map
+                                                        </a>
+                                                    <?php endif; ?>
                                                 <?php else: ?>
                                                     <span style="color: #666;">Not checked in</span>
                                                 <?php endif; ?>
@@ -211,6 +223,12 @@ try {
                                                         <br><a href="../../assets/images/uploads/attendance/<?php echo $record['check_out_selfie']; ?>" 
                                                                target="_blank" style="font-size: 0.8rem; color: #007bff;">
                                                             <i class="fas fa-camera"></i> View Selfie
+                                                        </a>
+                                                    <?php endif; ?>
+                                                    <?php if ($record['check_out_latitude'] && $record['check_out_longitude']): ?>
+                                                        <br><a href="#" onclick="showLocationModal('checkout', <?php echo $record['check_out_latitude']; ?>, <?php echo $record['check_out_longitude']; ?>, '<?php echo htmlspecialchars($record['employee_name']); ?>', '<?php echo formatDate($record['check_out_time'], 'M d, Y g:i A'); ?>')" 
+                                                               style="font-size: 0.8rem; color: #28a745;">
+                                                            <i class="fas fa-map-marker-alt"></i> View Location on Map
                                                         </a>
                                                     <?php endif; ?>
                                                 <?php else: ?>
@@ -272,5 +290,97 @@ try {
             </div>
         </div>
     </div>
+
+    <!-- Location Modal -->
+    <div id="locationModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3 id="modalTitle">Location on Map</h3>
+                <span class="close" onclick="closeLocationModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="modalInfo" style="margin-bottom: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+                    <strong id="employeeName"></strong><br>
+                    <span id="actionType"></span>: <span id="actionTime"></span>
+                </div>
+                <div id="map" style="height: 400px; width: 100%; border-radius: 4px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        let map = null;
+        let marker = null;
+
+        function showLocationModal(type, latitude, longitude, employeeName, actionTime) {
+            // Set modal content
+            document.getElementById('employeeName').textContent = employeeName;
+            document.getElementById('actionType').textContent = type === 'checkin' ? 'Check In' : 'Check Out';
+            document.getElementById('actionTime').textContent = actionTime;
+            document.getElementById('modalTitle').textContent = (type === 'checkin' ? 'Check In' : 'Check Out') + ' Location';
+            
+            // Show modal
+            document.getElementById('locationModal').style.display = 'block';
+            
+            // Initialize map after modal is visible
+            setTimeout(() => {
+                if (map) {
+                    map.remove();
+                }
+                
+                // Create map
+                map = L.map('map').setView([latitude, longitude], 15);
+                
+                // Add OpenStreetMap tiles
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+                
+                // Add marker
+                const iconColor = type === 'checkin' ? 'green' : 'red';
+                const customIcon = L.divIcon({
+                    html: `<i class="fas fa-map-marker-alt" style="color: ${iconColor}; font-size: 24px;"></i>`,
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 24],
+                    className: 'custom-marker'
+                });
+                
+                marker = L.marker([latitude, longitude], { icon: customIcon }).addTo(map);
+                
+                // Add popup
+                const popupContent = `
+                    <div style="text-align: center;">
+                        <strong>${employeeName}</strong><br>
+                        ${type === 'checkin' ? 'Check In' : 'Check Out'}<br>
+                        ${actionTime}<br>
+                        <small>Lat: ${latitude.toFixed(6)}, Lng: ${longitude.toFixed(6)}</small>
+                    </div>
+                `;
+                marker.bindPopup(popupContent).openPopup();
+                
+                // Invalidate size to ensure proper rendering
+                map.invalidateSize();
+            }, 100);
+        }
+
+        function closeLocationModal() {
+            document.getElementById('locationModal').style.display = 'none';
+            if (map) {
+                map.remove();
+                map = null;
+            }
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('locationModal');
+            if (event.target === modal) {
+                closeLocationModal();
+            }
+        }
+    </script>
 
 <?php include '../../components/footer.php'; ?>

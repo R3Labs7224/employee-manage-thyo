@@ -101,8 +101,14 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $pageTitle; ?> - Employee Management System</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="../../assets/images/logo.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../../assets/images/logo.png">
+    <link rel="shortcut icon" href="../../assets/images/logo.png">
+    <link rel="apple-touch-icon" href="../../assets/images/logo.png">
     <link rel="stylesheet" href="../../assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
     <div class="wrapper">
@@ -209,6 +215,8 @@ try {
                                             <th>Start Time</th>
                                             <th>Duration</th>
                                             <th>Status</th>
+                                            <th>Start Location</th>
+                                            <th>End Location</th>
                                             <th>Start Image</th>
                                             <th>Complete Image</th>
                                             <th>Actions</th>
@@ -251,6 +259,34 @@ try {
                                                 </span>
                                                 <?php if ($task['end_time']): ?>
                                                     <br><small style="color: #666;"><?php echo formatDate($task['end_time'], 'g:i A'); ?></small>
+                                                <?php endif; ?>
+                                            </td>
+                                            
+                                            <!-- START LOCATION COLUMN -->
+                                            <td>
+                                                <?php if ($task['latitude'] && $task['longitude']): ?>
+                                                    <a href="#" onclick="showLocationModal('start', <?php echo $task['latitude']; ?>, <?php echo $task['longitude']; ?>, '<?php echo htmlspecialchars($task['employee_name']); ?>', '<?php echo htmlspecialchars($task['title']); ?>', '<?php echo formatDate($task['start_time'], 'M d, Y g:i A'); ?>')" 
+                                                       class="btn" style="background: #28a745; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                                                        <i class="fas fa-map-marker-alt"></i> View on Map
+                                                    </a>
+                                                <?php else: ?>
+                                                    <span style="color: #666; font-size: 0.8rem;">No location data</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            
+                                            <!-- END LOCATION COLUMN -->
+                                            <td>
+                                                <?php if ($task['completion_latitude'] && $task['completion_longitude']): ?>
+                                                    <a href="#" onclick="showLocationModal('end', <?php echo $task['completion_latitude']; ?>, <?php echo $task['completion_longitude']; ?>, '<?php echo htmlspecialchars($task['employee_name']); ?>', '<?php echo htmlspecialchars($task['title']); ?>', '<?php echo $task['end_time'] ? formatDate($task['end_time'], 'M d, Y g:i A') : 'Task completed'; ?>')" 
+                                                       class="btn" style="background: #dc3545; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                                                        <i class="fas fa-map-marker-alt"></i> View on Map
+                                                    </a>
+                                                <?php else: ?>
+                                                    <?php if ($task['status'] === 'completed'): ?>
+                                                        <span style="color: #666; font-size: 0.8rem;">No location data</span>
+                                                    <?php else: ?>
+                                                        <span style="color: #666; font-size: 0.8rem;">Task not completed</span>
+                                                    <?php endif; ?>
                                                 <?php endif; ?>
                                             </td>
                                             
@@ -319,6 +355,101 @@ try {
             </div>
         </div>
     </div>
+
+    <!-- Location Modal -->
+    <div id="locationModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3 id="modalTitle">Task Location on Map</h3>
+                <span class="close" onclick="closeLocationModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="modalInfo" style="margin-bottom: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+                    <strong id="employeeName"></strong><br>
+                    <span id="taskTitle"></span><br>
+                    <span id="locationType"></span>: <span id="locationTime"></span>
+                </div>
+                <div id="map" style="height: 400px; width: 100%; border-radius: 4px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        let map = null;
+        let marker = null;
+
+        function showLocationModal(type, latitude, longitude, employeeName, taskTitle, locationTime) {
+            // Set modal content
+            document.getElementById('employeeName').textContent = employeeName;
+            document.getElementById('taskTitle').textContent = 'Task: ' + taskTitle;
+            document.getElementById('locationType').textContent = type === 'start' ? 'Start Location' : 'End Location';
+            document.getElementById('locationTime').textContent = locationTime;
+            document.getElementById('modalTitle').textContent = (type === 'start' ? 'Task Start' : 'Task End') + ' Location';
+            
+            // Show modal
+            document.getElementById('locationModal').style.display = 'block';
+            
+            // Initialize map after modal is visible
+            setTimeout(() => {
+                if (map) {
+                    map.remove();
+                }
+                
+                // Create map
+                map = L.map('map').setView([latitude, longitude], 15);
+                
+                // Add OpenStreetMap tiles
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+                
+                // Add marker
+                const iconColor = type === 'start' ? 'green' : 'red';
+                const customIcon = L.divIcon({
+                    html: `<i class="fas fa-map-marker-alt" style="color: ${iconColor}; font-size: 24px;"></i>`,
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 24],
+                    className: 'custom-marker'
+                });
+                
+                marker = L.marker([latitude, longitude], { icon: customIcon }).addTo(map);
+                
+                // Add popup
+                const popupContent = `
+                    <div style="text-align: center;">
+                        <strong>${employeeName}</strong><br>
+                        <strong>${taskTitle}</strong><br>
+                        ${type === 'start' ? 'Task Started' : 'Task Completed'}<br>
+                        ${locationTime}<br>
+                        <small>Lat: ${latitude.toFixed(6)}, Lng: ${longitude.toFixed(6)}</small>
+                    </div>
+                `;
+                marker.bindPopup(popupContent).openPopup();
+                
+                // Invalidate size to ensure proper rendering
+                map.invalidateSize();
+            }, 100);
+        }
+
+        function closeLocationModal() {
+            document.getElementById('locationModal').style.display = 'none';
+            if (map) {
+                map.remove();
+                map = null;
+            }
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('locationModal');
+            if (event.target === modal) {
+                closeLocationModal();
+            }
+        }
+    </script>
 
     <?php include '../../components/footer.php'; ?>
 </body>
