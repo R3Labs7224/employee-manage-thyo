@@ -1,11 +1,18 @@
 <?php
-// api/employee/tasks.php - Final working version
+// api/employee/tasks.php - Complete working version with uploadBase64Image function
 require_once '../../config/database.php';
 require_once '../common/response.php';
 
 // Increase limits for image processing
-ini_set('memory_limit', '256M');
-ini_set('max_execution_time', 60);
+ini_set('memory_limit', '512M');
+ini_set('max_execution_time', 120);
+ini_set('post_max_size', '50M');
+ini_set('upload_max_filesize', '50M');
+
+// Enhanced error logging
+error_reporting(E_ALL);
+ini_set('log_errors', 1);
+ini_set('error_log', '../../logs/php_errors.log');
 
 // Verify authentication
 $token = getAuthHeader();
@@ -289,15 +296,11 @@ function completeTask($pdo, $employee) {
             return;
         }
         
-        // Handle completion image upload if provided
+        
         $completion_image = null;
         if (isset($input['completion_image']) && !empty($input['completion_image'])) {
-            try {
-                $completion_image = uploadBase64Image($input['completion_image'], '../../assets/images/uploads/tasks/completed/');
-            } catch (Exception $e) {
-                sendError('Failed to upload completion image: ' . $e->getMessage(), 400);
-                return;
-            }
+            // Use same directory as tasks creation (works like attendance)
+            $completion_image = uploadBase64Image($input['completion_image'], '../../assets/images/uploads/tasks/');
         }
         
         // Update task status to completed
@@ -337,4 +340,32 @@ function completeTask($pdo, $employee) {
         sendError('Database error occurred', 500);
     }
 }
+
+// MISSING FUNCTION - This was causing the 500 error!
+function uploadBase64Image($base64_string, $upload_dir) {
+    // Remove data:image/jpeg;base64, prefix if present
+    if (strpos($base64_string, 'data:image') === 0) {
+        $base64_string = substr($base64_string, strpos($base64_string, ',') + 1);
+    }
+    
+    $image_data = base64_decode($base64_string);
+    if ($image_data === false) {
+        return null;
+    }
+    
+    // Create directory if it doesn't exist
+    if (!file_exists($upload_dir)) {
+        mkdir($upload_dir, 0755, true);
+    }
+    
+    $filename = uniqid() . '.jpg';
+    $file_path = $upload_dir . $filename;
+    
+    if (file_put_contents($file_path, $image_data)) {
+        return $filename;
+    }
+    
+    return null;
+}
+
 ?>
