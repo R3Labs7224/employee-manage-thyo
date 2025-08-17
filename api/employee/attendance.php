@@ -1,4 +1,6 @@
 <?php
+// Modified api/employee/attendance.php for multiple check-ins/check-outs
+// Maintains exact same API response format as original
 require_once '../../config/database.php';
 require_once '../common/response.php';
 
@@ -36,11 +38,47 @@ function getAttendanceHistory($pdo, $employee) {
             FROM attendance a
             JOIN sites s ON a.site_id = s.id
             WHERE a.employee_id = ? AND DATE_FORMAT(a.date, '%Y-%m') = ?
-            ORDER BY a.date DESC
+            ORDER BY a.date DESC, a.check_in_time DESC
         ");
         
         $stmt->execute([$employee['id'], $month]);
-        $attendance = $stmt->fetchAll();
+        $all_attendance = $stmt->fetchAll();
+        
+        // Group by date and aggregate for frontend compatibility
+        $grouped_attendance = [];
+        foreach ($all_attendance as $record) {
+            $date = $record['date'];
+            if (!isset($grouped_attendance[$date])) {
+                // Use the first record found (most recent due to ORDER BY)
+                $grouped_attendance[$date] = $record;
+                $grouped_attendance[$date]['session_count'] = 0;
+                $grouped_attendance[$date]['total_working_hours'] = 0;
+            }
+            
+            // Count sessions and sum working hours
+            $grouped_attendance[$date]['session_count']++;
+            if ($record['working_hours']) {
+                $grouped_attendance[$date]['total_working_hours'] += $record['working_hours'];
+            }
+            
+            // Update working_hours field with total
+            $grouped_attendance[$date]['working_hours'] = $grouped_attendance[$date]['total_working_hours'];
+            
+            // Take last check-out time if exists
+            if ($record['check_out_time'] && 
+                (!$grouped_attendance[$date]['check_out_time'] || 
+                 $record['check_out_time'] > $grouped_attendance[$date]['check_out_time'])) {
+                $grouped_attendance[$date]['check_out_time'] = $record['check_out_time'];
+                $grouped_attendance[$date]['check_out_latitude'] = $record['check_out_latitude'];
+                $grouped_attendance[$date]['check_out_longitude'] = $record['check_out_longitude'];
+            }
+        }
+        
+        // Convert back to indexed array and remove helper fields
+        $attendance = array_values($grouped_attendance);
+        foreach ($attendance as &$record) {
+            unset($record['session_count'], $record['total_working_hours']);
+        }
         
         sendSuccess('Attendance history retrieved', $attendance);
         
@@ -65,18 +103,8 @@ function handleCheckInOut($pdo, $employee) {
     }
     
     try {
-        // Check if attendance record exists for today
-        $stmt = $pdo->prepare("
-            SELECT * FROM attendance 
-            WHERE employee_id = ? AND date = ?
-        ");
-        $stmt->execute([$employee['id'], $date]);
-        $existing = $stmt->fetch();
-        
         if ($action === 'check_in') {
-            if ($existing) {
-                sendError('Already checked in today', 400);
-            }
+            // REMOVED: Check if already checked in today (now allows multiple check-ins)
             
             // Handle selfie upload (base64)
             $selfie_filename = null;
@@ -100,12 +128,20 @@ function handleCheckInOut($pdo, $employee) {
             sendSuccess('Checked in successfully');
             
         } else { // check_out
+            // MODIFIED: Find the most recent check-in without a check-out for today
+            $stmt = $pdo->prepare("
+                SELECT * FROM attendance 
+                WHERE employee_id = ? AND date = ? 
+                AND check_in_time IS NOT NULL 
+                AND check_out_time IS NULL
+                ORDER BY check_in_time DESC
+                LIMIT 1
+            ");
+            $stmt->execute([$employee['id'], $date]);
+            $existing = $stmt->fetch();
+            
             if (!$existing) {
                 sendError('Must check in first', 400);
-            }
-            
-            if ($existing['check_out_time']) {
-                sendError('Already checked out today', 400);
             }
             
             // Handle selfie upload
