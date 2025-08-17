@@ -33,7 +33,7 @@ function getSalarySlips($pdo, $employee) {
     $limit = min(max((int)($_GET['limit'] ?? 12), 1), 100); // Between 1 and 100
     
     try {
-        // Build the salary slips query - LIMIT as integer to avoid binding issues
+        // Build the salary slips query - FIXED: Specify table aliases for ambiguous columns
         $sql = "
             SELECT s.*, 
                    e.name as employee_name,
@@ -80,27 +80,14 @@ function getSalarySlips($pdo, $employee) {
             AND YEAR(date) = ?
         ");
         $stmt->execute([$employee['id'], $current_month, $current_year]);
-        $current_month_attendance = $stmt->fetch();
-        
-        // If no attendance data, provide defaults
-        if (!$current_month_attendance) {
-            $current_month_attendance = [
-                'total_days' => 0,
-                'approved_days' => 0,
-                'pending_days' => 0,
-                'total_hours' => 0
-            ];
-        }
+        $current_month_attendance = $stmt->fetch() ?: [
+            'total_days' => 0, 'approved_days' => 0, 'pending_days' => 0, 'total_hours' => 0
+        ];
         
         // Get employee basic info
         $stmt = $pdo->prepare("
-            SELECT 
-                basic_salary, 
-                daily_wage,
-                name,
-                employee_code,
-                epf_number,
-                COALESCE(d.name, 'No Department') as department_name
+            SELECT e.basic_salary, e.daily_wage, e.name, e.employee_code, e.epf_number,
+                   COALESCE(d.name, 'No Department') as department_name
             FROM employees e
             LEFT JOIN departments d ON e.department_id = d.id
             WHERE e.id = ?
@@ -108,15 +95,15 @@ function getSalarySlips($pdo, $employee) {
         $stmt->execute([$employee['id']]);
         $employee_info = $stmt->fetch();
         
-        // Calculate estimated current salary
-        $estimated_salary = 0;
-        if ($employee_info && $current_month_attendance['approved_days'] > 0) {
-            $days_in_month = date('t'); // Days in current month
-            if ($employee_info['daily_wage'] > 0) {
-                $estimated_salary = $employee_info['daily_wage'] * $current_month_attendance['approved_days'];
-            } else {
-                $estimated_salary = ($employee_info['basic_salary'] / $days_in_month) * $current_month_attendance['approved_days'];
-            }
+        // Calculate estimated current month salary based on attendance
+        $days_in_month = date('t');
+        $current_day = date('d');
+        $attendance_rate = $current_month_attendance['approved_days'] / $current_day;
+        
+        if ($employee_info['daily_wage'] > 0) {
+            $estimated_salary = $current_month_attendance['approved_days'] * $employee_info['daily_wage'];
+        } else {
+            $estimated_salary = ($employee_info['basic_salary'] / $days_in_month) * $current_month_attendance['approved_days'];
         }
         
         // Get yearly summary
@@ -128,33 +115,24 @@ function getSalarySlips($pdo, $employee) {
                 COUNT(*) as total_months,
                 COALESCE(AVG(net_salary), 0) as avg_monthly_salary
             FROM salaries 
-            WHERE employee_id = ? AND year = ? AND status IN ('processed', 'paid')
+            WHERE employee_id = ? AND year = ?
         ");
         $stmt->execute([$employee['id'], $year]);
-        $yearly_summary = $stmt->fetch();
+        $yearly_summary = $stmt->fetch() ?: [
+            'total_earned' => 0, 'total_deductions' => 0, 'total_bonus' => 0, 
+            'total_months' => 0, 'avg_monthly_salary' => 0
+        ];
         
-        // If no yearly data, provide defaults
-        if (!$yearly_summary) {
-            $yearly_summary = [
-                'total_earned' => 0,
-                'total_deductions' => 0,
-                'total_bonus' => 0,
-                'total_months' => 0,
-                'avg_monthly_salary' => 0
-            ];
-        }
-        
-        // Format the salary slips to match expected structure
+        // Format salary slips data
         $formatted_slips = [];
         foreach ($salary_slips as $slip) {
             $formatted_slips[] = [
                 'id' => (int)$slip['id'],
-                'employee_id' => (int)$slip['employee_id'],
                 'month' => (int)$slip['month'],
                 'year' => (int)$slip['year'],
-                'basic_salary' => (float)$slip['basic_salary'],
+                'basic_salary' => (float)($slip['basic_salary'] ?? 0),
                 'total_working_days' => (int)($slip['total_working_days'] ?? 0),
-                'present_days' => (int)$slip['present_days'],
+                'present_days' => (int)($slip['present_days'] ?? 0),
                 'calculated_salary' => (float)($slip['calculated_salary'] ?? 0),
                 'gross_salary' => (float)($slip['calculated_salary'] ?? 0), // For compatibility
                 'total_hours' => (float)($slip['present_days'] ?? 0) * 8, // Assume 8 hours per day
