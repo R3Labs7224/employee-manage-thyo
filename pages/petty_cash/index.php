@@ -313,53 +313,231 @@ try {
     </div>
 
     <!-- Approval Modal -->
-    <div id="approvalModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
-        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 2rem; border-radius: 10px; width: 90%; max-width: 500px;">
-            <h3 style="margin-bottom: 1rem;">Review Petty Cash Request</h3>
-            <form method="POST" action="">
-                <input type="hidden" id="modal_request_id" name="request_id">
-                
-                <div style="margin-bottom: 1rem;">
-                    <strong>Employee:</strong> <span id="modal_employee_name"></span><br>
-                    <strong>Amount:</strong> <span id="modal_amount"></span>
+<div id="approvalModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
+    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 2rem; border-radius: 10px; width: 90%; max-width: 500px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);">
+        <h3 style="margin-bottom: 1rem; color: #333;">
+            <i class="fas fa-clipboard-check"></i> Review Petty Cash Request
+        </h3>
+        
+        <!-- FIXED: Separate forms for approve and reject to ensure proper action submission -->
+        <div id="modalContent">
+            <input type="hidden" id="modal_request_id_hidden" name="request_id">
+            
+            <div style="background: #f8f9fa; padding: 1rem; border-radius: 5px; margin-bottom: 1rem;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div>
+                        <strong>Employee:</strong><br>
+                        <span id="modal_employee_name" style="color: #666;"></span>
+                    </div>
+                    <div>
+                        <strong>Amount:</strong><br>
+                        <span id="modal_amount" style="color: #28a745; font-weight: bold; font-size: 1.1em;"></span>
+                    </div>
                 </div>
-                
-                <div class="form-group">
-                    <label for="notes">Notes (Optional)</label>
-                    <textarea id="notes" name="notes" class="form-control" rows="3" placeholder="Add any notes about this request..."></textarea>
+                <div style="margin-top: 0.5rem;">
+                    <strong>Reason:</strong><br>
+                    <span id="modal_reason" style="color: #666;"></span>
                 </div>
-                
-                <div style="text-align: right; gap: 1rem; display: flex; justify-content: flex-end;">
-                    <button type="button" class="btn" style="background: #6c757d; color: white;" onclick="closeApprovalModal()">Cancel</button>
-                    <button type="submit" name="action" value="reject" class="btn" style="background: #dc3545; color: white;">
-                        <i class="fas fa-times"></i> Reject
-                    </button>
-                    <button type="submit" name="action" value="approve" class="btn" style="background: #28a745; color: white;">
-                        <i class="fas fa-check"></i> Approve
-                    </button>
+                <div style="margin-top: 0.5rem;">
+                    <strong>Request Date:</strong><br>
+                    <span id="modal_date" style="color: #666;"></span>
                 </div>
-            </form>
+            </div>
+            
+            <div class="form-group">
+                <label for="modal_notes"><i class="fas fa-sticky-note"></i> Notes (Optional)</label>
+                <textarea id="modal_notes" class="form-control" rows="3" 
+                          placeholder="Add any notes about this request..."></textarea>
+            </div>
+            
+            <div style="text-align: right; gap: 1rem; display: flex; justify-content: flex-end; margin-top: 1.5rem;">
+                <button type="button" class="btn" style="background: #6c757d; color: white; padding: 0.5rem 1rem;" onclick="closeApprovalModal()">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button type="button" id="rejectBtn" class="btn" style="background: #dc3545; color: white; padding: 0.5rem 1rem;" onclick="submitApprovalAction('reject')">
+                    <i class="fas fa-times-circle"></i> Reject
+                </button>
+                <button type="button" id="approveBtn" class="btn" style="background: #28a745; color: white; padding: 0.5rem 1rem;" onclick="submitApprovalAction('approve')">
+                    <i class="fas fa-check-circle"></i> Approve
+                </button>
+            </div>
         </div>
+        
+        <!-- Hidden form for submission -->
+        <form id="hiddenApprovalForm" method="POST" action="" style="display: none;">
+            <input type="hidden" id="form_request_id" name="request_id">
+            <input type="hidden" id="form_action" name="action">
+            <input type="hidden" id="form_notes" name="notes">
+        </form>
     </div>
+</div>
 
-    <script>
-        function showApprovalModal(requestId, employeeName, amount) {
-            document.getElementById('modal_request_id').value = requestId;
-            document.getElementById('modal_employee_name').textContent = employeeName;
-            document.getElementById('modal_amount').textContent = formatCurrency(amount);
-            document.getElementById('approvalModal').style.display = 'block';
+<script>
+    console.log('Loading fixed petty cash functionality...');
+    
+    // Ensure formatCurrency function is available
+    function formatCurrency(amount) {
+        if (typeof window.EMS !== 'undefined' && window.EMS.formatCurrency) {
+            return window.EMS.formatCurrency(amount);
+        }
+        return '₹' + parseFloat(amount).toLocaleString('en-IN', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+    
+    // Global variable to store current request ID
+    let currentRequestId = null;
+    
+    function showApprovalModal(requestId, employeeName, amount, reason, requestDate) {
+        console.log('=== OPENING MODAL ===');
+        console.log('Request ID:', requestId);
+        console.log('Employee:', employeeName);
+        console.log('Amount:', amount);
+        
+        // Store the request ID globally
+        currentRequestId = requestId;
+        
+        // Populate modal fields
+        document.getElementById('modal_request_id_hidden').value = requestId;
+        document.getElementById('modal_employee_name').textContent = employeeName || 'Unknown Employee';
+        document.getElementById('modal_amount').textContent = formatCurrency(amount || 0);
+        
+        // Populate additional fields if they exist
+        const modalReason = document.getElementById('modal_reason');
+        const modalDate = document.getElementById('modal_date');
+        
+        if (modalReason) modalReason.textContent = reason || '';
+        if (modalDate) modalDate.textContent = requestDate || '';
+        
+        // Clear notes field
+        document.getElementById('modal_notes').value = '';
+        
+        // Show modal
+        document.getElementById('approvalModal').style.display = 'block';
+        
+        console.log('✅ Modal opened successfully');
+        
+        // Focus on notes field
+        setTimeout(() => {
+            document.getElementById('modal_notes').focus();
+        }, 300);
+    }
+    
+    function closeApprovalModal() {
+        document.getElementById('approvalModal').style.display = 'none';
+        currentRequestId = null;
+        console.log('Modal closed');
+    }
+    
+    // FIXED: New function to handle form submission with proper action
+    function submitApprovalAction(action) {
+        console.log('=== SUBMITTING ACTION ===');
+        console.log('Action:', action);
+        console.log('Request ID:', currentRequestId);
+        
+        if (!currentRequestId) {
+            console.error('❌ No request ID available');
+            alert('Error: No request ID found. Please try again.');
+            return false;
         }
         
-        function closeApprovalModal() {
-            document.getElementById('approvalModal').style.display = 'none';
+        if (!action || !['approve', 'reject'].includes(action)) {
+            console.error('❌ Invalid action:', action);
+            alert('Error: Invalid action specified.');
+            return false;
+        }
+        
+        // Get notes value
+        const notes = document.getElementById('modal_notes').value.trim();
+        
+        console.log('Form data:', {
+            request_id: currentRequestId,
+            action: action,
+            notes: notes
+        });
+        
+        // Populate hidden form
+        document.getElementById('form_request_id').value = currentRequestId;
+        document.getElementById('form_action').value = action;
+        document.getElementById('form_notes').value = notes;
+        
+        // Disable buttons and show loading state
+        const approveBtn = document.getElementById('approveBtn');
+        const rejectBtn = document.getElementById('rejectBtn');
+        
+        approveBtn.disabled = true;
+        rejectBtn.disabled = true;
+        
+        if (action === 'approve') {
+            approveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Approving...';
+        } else {
+            rejectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Rejecting...';
+        }
+        
+        console.log('✅ Submitting form...');
+        
+        // Submit the hidden form
+        document.getElementById('hiddenApprovalForm').submit();
+        
+        return true;
+    }
+    
+    // Initialize when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('=== INITIALIZING FIXED PETTY CASH FUNCTIONALITY ===');
+        
+        const modal = document.getElementById('approvalModal');
+        if (!modal) {
+            console.error('❌ Modal not found!');
+            return;
         }
         
         // Close modal when clicking outside
-        document.getElementById('approvalModal').addEventListener('click', function(e) {
-            if (e.target === this) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
                 closeApprovalModal();
             }
         });
-    </script>
+        
+        // ESC key support
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && modal.style.display === 'block') {
+                closeApprovalModal();
+            }
+        });
+        
+        // Check for review buttons
+        const reviewButtons = document.querySelectorAll('button[onclick*="showApprovalModal"]');
+        console.log('✅ Found', reviewButtons.length, 'review buttons');
+        
+        // Auto-hide alerts
+        const alerts = document.querySelectorAll('.alert-success, .alert-error');
+        alerts.forEach((alert, index) => {
+            setTimeout(() => {
+                if (alert && alert.parentNode) {
+                    alert.style.transition = 'opacity 0.5s ease';
+                    alert.style.opacity = '0';
+                    setTimeout(() => {
+                        if (alert.parentNode) {
+                            alert.remove();
+                        }
+                    }, 500);
+                }
+            }, 5000 + (index * 500));
+        });
+        
+        console.log('✅ Fixed petty cash functionality initialized successfully');
+    });
+    
+    // Test function
+    window.testModalFixed = function() {
+        console.log('Testing fixed modal...');
+        showApprovalModal(999, 'Test Employee', 1000, 'Test reason', '2024-01-01');
+    };
+    
+    console.log('✅ Fixed Petty Cash Script Loaded');
+    console.log('💡 Tip: Type "testModalFixed()" in console to test');
+</script>
 
 <?php include '../../components/footer.php'; ?>
