@@ -34,22 +34,26 @@ function getAttendanceHistory($pdo, $employee) {
         // Enhanced query with formatted location display
         $stmt = $pdo->prepare("
             SELECT a.*, s.name as site_name,
-                   CASE 
-                       WHEN a.check_in_latitude IS NOT NULL AND a.check_in_longitude IS NOT NULL THEN 
-                           CONCAT('Lat: ', ROUND(a.check_in_latitude, 6), ', Lng: ', ROUND(a.check_in_longitude, 6))
-                       ELSE 'Location not available' 
-                   END as check_in_location_display,
-                   CASE 
-                       WHEN a.check_out_latitude IS NOT NULL AND a.check_out_longitude IS NOT NULL THEN 
-                           CONCAT('Lat: ', ROUND(a.check_out_latitude, 6), ', Lng: ', ROUND(a.check_out_longitude, 6))
-                       ELSE NULL 
-                   END as check_out_location_display,
-                   DATE_FORMAT(a.created_at, '%H:%i') as check_in_display_time,
-                   DATE_FORMAT(a.updated_at, '%H:%i') as check_out_display_time
-            FROM attendance a
-            JOIN sites s ON a.site_id = s.id
-            WHERE a.employee_id = ? AND DATE_FORMAT(a.date, '%Y-%m') = ?
-            ORDER BY a.date DESC, a.created_at DESC
+       CASE 
+           WHEN a.check_in_latitude IS NOT NULL AND a.check_in_longitude IS NOT NULL THEN 
+               CONCAT('Lat: ', ROUND(a.check_in_latitude, 6), ', Lng: ', ROUND(a.check_in_longitude, 6))
+           ELSE 'Location not available' 
+       END as check_in_location_display,
+       CASE 
+           WHEN a.check_out_latitude IS NOT NULL AND a.check_out_longitude IS NOT NULL THEN 
+               CONCAT('Lat: ', ROUND(a.check_out_latitude, 6), ', Lng: ', ROUND(a.check_out_longitude, 6))
+           ELSE NULL 
+       END as check_out_location_display,
+       DATE_FORMAT(a.created_at, '%H:%i') as check_in_display_time,
+       CASE 
+           WHEN a.check_out_latitude IS NOT NULL AND a.check_out_longitude IS NOT NULL THEN 
+               DATE_FORMAT(a.updated_at, '%H:%i')
+           ELSE NULL 
+       END as check_out_display_time
+        FROM attendance a
+        JOIN sites s ON a.site_id = s.id
+        WHERE a.employee_id = ? AND DATE_FORMAT(a.date, '%Y-%m') = ?
+        ORDER BY a.date DESC, a.created_at DESC
         ");
         
         $stmt->execute([$employee['id'], $month]);
