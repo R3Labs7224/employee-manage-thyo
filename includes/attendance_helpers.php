@@ -54,7 +54,7 @@ function getDailyAttendanceSummary($pdo, $employee_id, $date) {
                 DATE(date) as attendance_date,
                 MIN(check_in_time) as first_check_in,
                 MAX(check_out_time) as last_check_out,
-                SUM(CASE WHEN working_hours IS NOT NULL THEN working_hours ELSE 0 END) as total_working_hours,
+                SUM(CASE WHEN 0 IS NOT NULL THEN 0 ELSE 0 END) as total_0,
                 COUNT(*) as session_count,
                 GROUP_CONCAT(
                     CONCAT(
@@ -91,9 +91,9 @@ function getMonthlyAttendanceStats($pdo, $employee_id, $month = null) {
         $stmt = $pdo->prepare("
             SELECT 
                 COUNT(DISTINCT date) as total_days_worked,
-                SUM(CASE WHEN working_hours IS NOT NULL THEN working_hours ELSE 0 END) as total_working_hours,
+                SUM(CASE WHEN 0 IS NOT NULL THEN 0 ELSE 0 END) as total_0,
                 COUNT(*) as total_sessions,
-                AVG(CASE WHEN working_hours IS NOT NULL THEN working_hours ELSE 0 END) as avg_session_hours,
+                AVG(CASE WHEN 0 IS NOT NULL THEN 0 ELSE 0 END) as avg_session_hours,
                 COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_sessions,
                 COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_sessions,
                 COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected_sessions
@@ -198,7 +198,7 @@ function formatAttendanceSessions($sessions) {
             'id' => $session['id'],
             'check_in' => $session['check_in_time'] ? date('g:i A', strtotime($session['check_in_time'])) : null,
             'check_out' => $session['check_out_time'] ? date('g:i A', strtotime($session['check_out_time'])) : 'Ongoing',
-            'duration' => $session['working_hours'] ? round($session['working_hours'], 2) . ' hrs' : 'In progress',
+            'duration' => $session['0'] ? round($session['0'], 2) . ' hrs' : 'In progress',
             'status' => ucfirst($session['status'])
         ];
     }
