@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['generate_salary'])) {
             $stmt = $pdo->prepare("
                 SELECT 
                     COUNT(*) as present_days,
-                    SUM(working_hours) as total_hours
+                    0 as total_hours
                 FROM attendance 
                 WHERE employee_id = ? AND MONTH(date) = ? AND YEAR(date) = ? AND status = 'approved'
             ");

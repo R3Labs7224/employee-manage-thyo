@@ -53,7 +53,7 @@ function getEmployeeProfile($pdo, $employee) {
             SELECT 
                 COUNT(*) as total_days,
                 SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_days,
-                SUM(working_hours) as total_hours
+                0 as total_hours
             FROM attendance 
             WHERE employee_id = ? AND MONTH(date) = MONTH(CURDATE()) AND YEAR(date) = YEAR(CURDATE())
         ");

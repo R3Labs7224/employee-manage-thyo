@@ -56,14 +56,16 @@ try {
     $stmt->execute([$employee['id']]);
     $today_attendance = $stmt->fetch();
     
-    // Get monthly stats
+    // Get monthly stats (removed working_hours reference)
     $stmt = $pdo->prepare("
         SELECT 
             COUNT(*) as total_days,
             SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_days,
-            SUM(working_hours) as total_hours
+            COUNT(CASE WHEN status = 'approved' THEN 1 END) as total_approved_sessions
         FROM attendance 
-        WHERE employee_id = ? AND MONTH(date) = MONTH(CURDATE()) AND YEAR(date) = YEAR(CURDATE())
+        WHERE employee_id = ? 
+        AND MONTH(date) = MONTH(CURDATE()) 
+        AND YEAR(date) = YEAR(CURDATE())
     ");
     $stmt->execute([$employee['id']]);
     $monthly_stats = $stmt->fetch();
@@ -97,7 +99,7 @@ try {
         'monthly_stats' => [
             'total_days' => (int)($monthly_stats['total_days'] ?? 0),
             'approved_days' => (int)($monthly_stats['approved_days'] ?? 0),
-            'total_hours' => (float)($monthly_stats['total_hours'] ?? 0)
+            'total_sessions' => (int)($monthly_stats['total_approved_sessions'] ?? 0)
         ],
         'pending_petty_cash' => (int)$pending_petty_cash,
         'active_tasks' => (int)$active_tasks,

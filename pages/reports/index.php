@@ -58,8 +58,8 @@ function getAttendanceReport($pdo, $month, $employee_id) {
             SUM(CASE WHEN a.status = 'approved' THEN 1 ELSE 0 END) as approved_days,
             SUM(CASE WHEN a.status = 'pending' THEN 1 ELSE 0 END) as pending_days,
             SUM(CASE WHEN a.status = 'rejected' THEN 1 ELSE 0 END) as rejected_days,
-            AVG(a.working_hours) as avg_hours,
-            SUM(a.working_hours) as total_hours
+            AVG(0) as avg_hours,
+            SUM(0) as total_hours
         FROM attendance a
         JOIN employees e ON a.employee_id = e.id
         WHERE " . implode(' AND ', $where_conditions) . "
