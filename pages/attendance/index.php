@@ -181,9 +181,8 @@ try {
                                             <th>Employee</th>
                                             <th>Date</th>
                                             <th>Site</th>
-                                            <th>Check In</th>
-                                            <th>Check Out</th>
-                                            <th>Hours</th>
+                                            <th>Check In Location</th>
+                                            <th>Check Out Location</th>
                                             <th>Status</th>
                                             <th>Actions</th>
                                         </tr>
@@ -198,48 +197,31 @@ try {
                                             <td><?php echo formatDate($record['date'], 'M d, Y'); ?></td>
                                             <td><?php echo htmlspecialchars($record['site_name']); ?></td>
                                             <td>
-                                                <?php if ($record['check_in_time']): ?>
-                                                    <?php echo formatDate($record['check_in_time'], 'g:i A'); ?>
-                                                    <?php if ($record['check_in_selfie']): ?>
-                                                        <br><a href="../../assets/images/uploads/attendance/<?php echo $record['check_in_selfie']; ?>" 
-                                                               target="_blank" style="font-size: 0.8rem; color: #007bff;">
-                                                            <i class="fas fa-camera"></i> View Selfie
-                                                        </a>
-                                                    <?php endif; ?>
-                                                    <?php if ($record['check_in_latitude'] && $record['check_in_longitude']): ?>
-                                                        <br><a href="#" onclick="showLocationModal('checkin', <?php echo $record['check_in_latitude']; ?>, <?php echo $record['check_in_longitude']; ?>, '<?php echo htmlspecialchars($record['employee_name']); ?>', '<?php echo formatDate($record['check_in_time'], 'M d, Y g:i A'); ?>')" 
-                                                               style="font-size: 0.8rem; color: #28a745;">
-                                                            <i class="fas fa-map-marker-alt"></i> View Location on Map
-                                                        </a>
-                                                    <?php endif; ?>
+                                                <?php if ($record['check_in_latitude'] && $record['check_in_longitude']): ?>
+                                                    <a href="#" onclick="showLocationModal('checkin', <?php echo $record['check_in_latitude']; ?>, <?php echo $record['check_in_longitude']; ?>, '<?php echo htmlspecialchars($record['employee_name']); ?>', '<?php echo formatDate($record['date'], 'M d, Y'); ?>')" 
+                                                    style="font-size: 0.9rem; color: #28a745;">
+                                                        <i class="fas fa-map-marker-alt"></i> View Location
+                                                    </a>
+                                                    <br><small style="color: #666; font-family: monospace;">
+                                                        <?php echo number_format($record['check_in_latitude'], 6); ?>, 
+                                                        <?php echo number_format($record['check_in_longitude'], 6); ?>
+                                                    </small>
                                                 <?php else: ?>
                                                     <span style="color: #666;">Not checked in</span>
                                                 <?php endif; ?>
                                             </td>
                                             <td>
-                                                <?php if ($record['check_out_time']): ?>
-                                                    <?php echo formatDate($record['check_out_time'], 'g:i A'); ?>
-                                                    <?php if ($record['check_out_selfie']): ?>
-                                                        <br><a href="../../assets/images/uploads/attendance/<?php echo $record['check_out_selfie']; ?>" 
-                                                               target="_blank" style="font-size: 0.8rem; color: #007bff;">
-                                                            <i class="fas fa-camera"></i> View Selfie
-                                                        </a>
-                                                    <?php endif; ?>
-                                                    <?php if ($record['check_out_latitude'] && $record['check_out_longitude']): ?>
-                                                        <br><a href="#" onclick="showLocationModal('checkout', <?php echo $record['check_out_latitude']; ?>, <?php echo $record['check_out_longitude']; ?>, '<?php echo htmlspecialchars($record['employee_name']); ?>', '<?php echo formatDate($record['check_out_time'], 'M d, Y g:i A'); ?>')" 
-                                                               style="font-size: 0.8rem; color: #28a745;">
-                                                            <i class="fas fa-map-marker-alt"></i> View Location on Map
-                                                        </a>
-                                                    <?php endif; ?>
+                                                <?php if ($record['check_out_latitude'] && $record['check_out_longitude']): ?>
+                                                    <a href="#" onclick="showLocationModal('checkout', <?php echo $record['check_out_latitude']; ?>, <?php echo $record['check_out_longitude']; ?>, '<?php echo htmlspecialchars($record['employee_name']); ?>', '<?php echo formatDate($record['date'], 'M d, Y'); ?>')" 
+                                                    style="font-size: 0.9rem; color: #dc3545;">
+                                                        <i class="fas fa-map-marker-alt"></i> View Location
+                                                    </a>
+                                                    <br><small style="color: #666; font-family: monospace;">
+                                                        <?php echo number_format($record['check_out_latitude'], 6); ?>, 
+                                                        <?php echo number_format($record['check_out_longitude'], 6); ?>
+                                                    </small>
                                                 <?php else: ?>
                                                     <span style="color: #666;">Not checked out</span>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td>
-                                                <?php if ($record['working_hours'] > 0): ?>
-                                                    <?php echo number_format($record['working_hours'], 2); ?> hrs
-                                                <?php else: ?>
-                                                    <span style="color: #666;">-</span>
                                                 <?php endif; ?>
                                             </td>
                                             <td>
