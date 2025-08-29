@@ -1,5 +1,5 @@
 <?php
-// api/employee/attendance.php - UPDATED: Removed image and time capturing
+// api/employee/attendance.php - UPDATED: Enhanced location display
 require_once '../../config/database.php';
 require_once '../common/response.php';
 
@@ -31,8 +31,21 @@ function getAttendanceHistory($pdo, $employee) {
     $month = $_GET['month'] ?? date('Y-m');
     
     try {
+        // Enhanced query with formatted location display
         $stmt = $pdo->prepare("
-            SELECT a.*, s.name as site_name
+            SELECT a.*, s.name as site_name,
+                   CASE 
+                       WHEN a.check_in_latitude IS NOT NULL AND a.check_in_longitude IS NOT NULL THEN 
+                           CONCAT('Lat: ', ROUND(a.check_in_latitude, 6), ', Lng: ', ROUND(a.check_in_longitude, 6))
+                       ELSE 'Location not available' 
+                   END as check_in_location_display,
+                   CASE 
+                       WHEN a.check_out_latitude IS NOT NULL AND a.check_out_longitude IS NOT NULL THEN 
+                           CONCAT('Lat: ', ROUND(a.check_out_latitude, 6), ', Lng: ', ROUND(a.check_out_longitude, 6))
+                       ELSE NULL 
+                   END as check_out_location_display,
+                   DATE_FORMAT(a.created_at, '%H:%i') as check_in_display_time,
+                   DATE_FORMAT(a.updated_at, '%H:%i') as check_out_display_time
             FROM attendance a
             JOIN sites s ON a.site_id = s.id
             WHERE a.employee_id = ? AND DATE_FORMAT(a.date, '%Y-%m') = ?
@@ -61,6 +74,8 @@ function getAttendanceHistory($pdo, $employee) {
                  $record['created_at'] > $grouped_attendance[$date]['created_at'])) {
                 $grouped_attendance[$date]['check_out_latitude'] = $record['check_out_latitude'];
                 $grouped_attendance[$date]['check_out_longitude'] = $record['check_out_longitude'];
+                $grouped_attendance[$date]['check_out_location_display'] = $record['check_out_location_display'];
+                $grouped_attendance[$date]['check_out_display_time'] = $record['check_out_display_time'];
             }
         }
         
@@ -94,6 +109,22 @@ function handleCheckInOut($pdo, $employee) {
     
     try {
         if ($action === 'check_in') {
+            // Check if already checked in today
+            $stmt = $pdo->prepare("
+                SELECT * FROM attendance 
+                WHERE employee_id = ? AND date = ? 
+                AND check_in_latitude IS NOT NULL 
+                AND check_out_latitude IS NULL
+                ORDER BY created_at DESC
+                LIMIT 1
+            ");
+            $stmt->execute([$employee['id'], $date]);
+            $existing = $stmt->fetch();
+            
+            if ($existing) {
+                sendError('Already checked in today. Please check out first.', 400);
+            }
+            
             // Create new attendance record
             $stmt = $pdo->prepare("
                 INSERT INTO attendance (
@@ -107,7 +138,10 @@ function handleCheckInOut($pdo, $employee) {
                 $latitude, $longitude
             ]);
             
-            sendSuccess('Checked in successfully');
+            sendSuccess('Checked in successfully', [
+                'attendance_id' => $pdo->lastInsertId(),
+                'check_in_location' => "Lat: " . round($latitude, 6) . ", Lng: " . round($longitude, 6)
+            ]);
             
         } else { // check_out
             // Find the most recent check-in without a check-out for today
@@ -123,14 +157,15 @@ function handleCheckInOut($pdo, $employee) {
             $existing = $stmt->fetch();
             
             if (!$existing) {
-                sendError('Must check in first', 400);
+                sendError('No active check-in found. Please check in first.', 400);
             }
             
             // Update attendance record with checkout location only
             $stmt = $pdo->prepare("
                 UPDATE attendance SET 
                     check_out_latitude = ?,
-                    check_out_longitude = ?
+                    check_out_longitude = ?,
+                    updated_at = NOW()
                 WHERE id = ?
             ");
             
@@ -138,10 +173,14 @@ function handleCheckInOut($pdo, $employee) {
                 $latitude, $longitude, $existing['id']
             ]);
             
-            sendSuccess('Checked out successfully');
+            sendSuccess('Checked out successfully', [
+                'attendance_id' => $existing['id'],
+                'check_out_location' => "Lat: " . round($latitude, 6) . ", Lng: " . round($longitude, 6)
+            ]);
         }
         
     } catch (PDOException $e) {
+        error_log("Attendance error: " . $e->getMessage());
         sendError('Database error occurred', 500);
     }
 }
