@@ -31,6 +31,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
     }
 }
 
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['bulk_delete'])) {
+    if (isset($_POST['selected_ids']) && is_array($_POST['selected_ids']) && hasPermission('superadmin')) {
+        try {
+            $ids = array_map('intval', $_POST['selected_ids']);
+            $placeholders = str_repeat('?,', count($ids) - 1) . '?';
+            $stmt = $pdo->prepare("DELETE FROM petty_cash_requests WHERE id IN ($placeholders)");
+            $stmt->execute($ids);
+            $message = '<div class="alert alert-success">' . count($ids) . ' petty cash request(s) deleted successfully!</div>';
+        } catch (PDOException $e) {
+            $message = '<div class="alert alert-error">Error deleting petty cash requests.</div>';
+        }
+    }
+}
+
+// Handle single delete
+if (isset($_GET['delete']) && is_numeric($_GET['delete']) && hasPermission('superadmin')) {
+    try {
+        $stmt = $pdo->prepare("DELETE FROM petty_cash_requests WHERE id = ?");
+        $stmt->execute([$_GET['delete']]);
+        $message = '<div class="alert alert-success">Petty cash request deleted successfully!</div>';
+    } catch (PDOException $e) {
+        $message = '<div class="alert alert-error">Error deleting petty cash request.</div>';
+    }
+}
+
 // Get filter parameters
 $status_filter = $_GET['status'] ?? '';
 $employee_filter = $_GET['employee'] ?? '';
@@ -227,85 +252,100 @@ try {
                     </div>
                     <div class="card-body">
                         <?php if (empty($requests)): ?>
-                            <div style="text-align: center; padding: 3rem; color: #666;">
-                                <i class="fas fa-money-bill fa-3x" style="margin-bottom: 1rem; opacity: 0.5;"></i>
-                                <h3>No Petty Cash Requests Found</h3>
-                                <p>No requests match the selected filters.</p>
-                            </div>
-                        <?php else: ?>
-                            <div style="overflow-x: auto;">
-                                <table class="table">
-                                    <thead>
-                                        <tr>
-                                            <th>Employee</th>
-                                            <th>Amount</th>
-                                            <th>Reason</th>
-                                            <th>Request Date</th>
-                                            <th>Receipt</th>
-                                            <th>Status</th>
-                                            <th>Notes</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php foreach ($requests as $request): ?>
-                                        <tr>
-                                            <td>
-                                                <strong><?php echo htmlspecialchars($request['employee_code']); ?></strong><br>
-                                                <small><?php echo htmlspecialchars($request['employee_name']); ?></small>
-                                            </td>
-                                            <td><strong><?php echo formatCurrency($request['amount']); ?></strong></td>
-                                            <td>
-                                                <div style="max-width: 200px; word-wrap: break-word;">
-                                                    <?php echo htmlspecialchars($request['reason']); ?>
-                                                </div>
-                                            </td>
-                                            <td><?php echo formatDate($request['request_date'], 'M d, Y'); ?></td>
-                                            <td>
-                                                <?php if ($request['receipt_image']): ?>
-                                                    <a href="../../assets/images/uploads/petty_cash/<?php echo $request['receipt_image']; ?>" 
-                                                       target="_blank" class="btn" style="background: #17a2b8; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
-                                                        <i class="fas fa-file-image"></i> View
-                                                    </a>
-                                                <?php else: ?>
-                                                    <span style="color: #666;">No receipt</span>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td>
-                                                <span class="badge badge-<?php 
-                                                    echo $request['status'] === 'approved' ? 'success' : 
-                                                        ($request['status'] === 'rejected' ? 'danger' : 'warning'); 
-                                                ?>">
-                                                    <?php echo ucfirst($request['status']); ?>
-                                                </span>
-                                                <?php if ($request['approved_by_name']): ?>
-                                                    <br><small style="color: #666;">by <?php echo htmlspecialchars($request['approved_by_name']); ?></small>
-                                                    <?php if ($request['approval_date']): ?>
-                                                        <br><small style="color: #666;"><?php echo formatDate($request['approval_date'], 'M d, Y'); ?></small>
-                                                    <?php endif; ?>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td>
-                                                <div style="max-width: 150px; word-wrap: break-word;">
-                                                    <?php echo htmlspecialchars($request['notes'] ?: '-'); ?>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <?php if ($request['status'] === 'pending' && hasPermission('supervisor')): ?>
-                                                    <button type="button" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                                                            onclick="showApprovalModal(<?php echo $request['id']; ?>, '<?php echo htmlspecialchars($request['employee_name']); ?>', <?php echo $request['amount']; ?>)">
-                                                        <i class="fas fa-edit"></i> Review
-                                                    </button>
-                                                <?php else: ?>
-                                                    <span style="color: #666; font-size: 0.8rem;">-</span>
-                                                <?php endif; ?>
-                                            </td>
-                                        </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                        <?php endif; ?>
+    <div class="table-empty-state">
+        <i class="fas fa-receipt"></i>
+        <h3>No Petty Cash Requests Found</h3>
+        <p>No requests match your current filters.</p>
+    </div>
+        <?php else: ?>
+            <form method="POST" id="bulkForm">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <?php if (hasPermission('superadmin')): ?>
+                                <th style="width: 40px;">
+                                    <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                                </th>
+                                <?php endif; ?>
+                                <th>Employee</th>
+                                <th>Amount</th>
+                                <th>Reason</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th>Approved By</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($requests as $request): ?>
+                            <tr>
+                                <?php if (hasPermission('superadmin')): ?>
+                                <td>
+                                    <input type="checkbox" name="selected_ids[]" value="<?php echo $request['id']; ?>" class="row-checkbox">
+                                </td>
+                                <?php endif; ?>
+                                <td>
+                                    <div>
+                                        <strong><?php echo htmlspecialchars($request['employee_name']); ?></strong>
+                                        <small style="color: #666; display: block;"><?php echo htmlspecialchars($request['employee_code']); ?></small>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="amount">₹<?php echo number_format($request['amount'], 2); ?></span>
+                                </td>
+                                <td>
+                                    <span title="<?php echo htmlspecialchars($request['reason']); ?>">
+                                        <?php echo strlen($request['reason']) > 50 ? htmlspecialchars(substr($request['reason'], 0, 47)) . '...' : htmlspecialchars($request['reason']); ?>
+                                    </span>
+                                </td>
+                                <td><?php echo formatDate($request['request_date']); ?></td>
+                                <td>
+                                    <span class="status-badge status-<?php echo $request['status']; ?>">
+                                        <?php echo ucfirst($request['status']); ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <?php echo $request['approved_by_name'] ? htmlspecialchars($request['approved_by_name']) : '-'; ?>
+                                </td>
+                                <td>
+                                    <div style="display: flex; gap: 0.25rem;">
+                                        <?php if ($request['status'] == 'pending' && hasPermission('supervisor')): ?>
+                                        <button type="button" class="btn" style="background: #28a745; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                                                onclick="showApprovalModal(<?php echo $request['id']; ?>, '<?php echo htmlspecialchars($request['employee_name']); ?>', <?php echo $request['amount']; ?>, '<?php echo htmlspecialchars($request['reason']); ?>', '<?php echo $request['request_date']; ?>')">
+                                            <i class="fas fa-check"></i> Review
+                                        </button>
+                                        <?php endif; ?>
+                                        
+                                        <?php if (hasPermission('superadmin')): ?>
+                                        <a href="?delete=<?php echo $request['id']; ?>" 
+                                        class="btn" style="background: #e74c3c; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                                        onclick="return confirm('Are you sure you want to delete this petty cash request?')">
+                                            <i class="fas fa-trash"></i>
+                                        </a>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Bulk Actions Bar -->
+                <div id="bulkActions" class="bulk-actions" style="display: none;">
+                    <span id="selectedCount">0 items selected</span>
+                    <button type="button" class="btn btn-danger" onclick="confirmBulkDelete()">
+                        <i class="fas fa-trash"></i> Delete Selected
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="clearSelection()">
+                        <i class="fas fa-times"></i> Clear Selection
+                    </button>
+                </div>
+                
+                <input type="hidden" name="bulk_delete" value="1">
+            </form>
+<?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -482,6 +522,60 @@ try {
         
         return true;
     }
+
+    function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.row-checkbox');
+    const bulkActions = document.getElementById('bulkActions');
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll.checked;
+    });
+    
+    updateBulkActions();
+}
+
+    function updateBulkActions() {
+        const checkboxes = document.querySelectorAll('.row-checkbox:checked');
+        const bulkActions = document.getElementById('bulkActions');
+        const selectedCount = document.getElementById('selectedCount');
+        
+        if (checkboxes.length > 0) {
+            bulkActions.style.display = 'flex';
+            selectedCount.textContent = checkboxes.length + ' item' + (checkboxes.length !== 1 ? 's' : '') + ' selected';
+        } else {
+            bulkActions.style.display = 'none';
+        }
+    }
+
+    function confirmBulkDelete() {
+        const checkboxes = document.querySelectorAll('.row-checkbox:checked');
+        if (checkboxes.length === 0) {
+            alert('Please select at least one item to delete.');
+            return;
+        }
+        
+        if (confirm(`Are you sure you want to delete ${checkboxes.length} petty cash request(s)? This action cannot be undone.`)) {
+            document.getElementById('bulkForm').submit();
+        }
+    }
+
+    function clearSelection() {
+        const checkboxes = document.querySelectorAll('.row-checkbox');
+        const selectAll = document.getElementById('selectAll');
+        
+        checkboxes.forEach(checkbox => checkbox.checked = false);
+        selectAll.checked = false;
+        updateBulkActions();
+    }
+
+    // Add event listeners to checkboxes
+    document.addEventListener('DOMContentLoaded', function() {
+        const checkboxes = document.querySelectorAll('.row-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateBulkActions);
+        });
+    });
     
     // Initialize when DOM is ready
     document.addEventListener('DOMContentLoaded', function() {

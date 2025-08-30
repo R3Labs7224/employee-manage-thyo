@@ -30,6 +30,7 @@ function getPettyCashRequests($pdo, $employee) {
     $month = $_GET['month'] ?? date('Y-m');
     
     try {
+        // Get all petty cash requests for the employee in the specified month
         $stmt = $pdo->prepare("
             SELECT p.*, u.username as approved_by_name
             FROM petty_cash_requests p
@@ -39,35 +40,57 @@ function getPettyCashRequests($pdo, $employee) {
         ");
         
         $stmt->execute([$employee['id'], $month]);
-        $requests = $stmt->fetchAll();
+        $all_requests = $stmt->fetchAll();
         
-        // Get summary stats
-        $total_amount = 0;
-        $approved_amount = 0;
-        $pending_amount = 0;
-        $rejected_amount = 0;
+        // Separate requests by status
+        $pending_requests = [];
+        $approved_requests = [];
+        $rejected_requests = [];
         
-        foreach ($requests as $request) {
-            $total_amount += $request['amount'];
+        foreach ($all_requests as $request) {
             switch ($request['status']) {
-                case 'approved':
-                    $approved_amount += $request['amount'];
-                    break;
                 case 'pending':
-                    $pending_amount += $request['amount'];
+                    $pending_requests[] = $request;
+                    break;
+                case 'approved':
+                    $approved_requests[] = $request;
                     break;
                 case 'rejected':
-                    $rejected_amount += $request['amount'];
+                    $rejected_requests[] = $request;
                     break;
             }
         }
         
+        $requests_to_return = [];
+        
+        if (count($pending_requests) > 0) {
+            // If there are pending requests, return pending + rejected (exclude approved)
+            $requests_to_return = array_merge($pending_requests, $rejected_requests);
+        } else {
+            // If no pending requests exist, return empty list (even if rejected exist)
+            $requests_to_return = [];
+        }
+        
+        // Calculate summary stats for returned requests only
+        $total_amount = 0;
+        $pending_amount = 0;
+        $rejected_amount = 0;
+        
+        foreach ($requests_to_return as $request) {
+            $total_amount += $request['amount'];
+            if ($request['status'] === 'pending') {
+                $pending_amount += $request['amount'];
+            } else if ($request['status'] === 'rejected') {
+                $rejected_amount += $request['amount'];
+            }
+        }
+        
         sendSuccess('Petty cash requests retrieved successfully', [
-            'requests' => $requests,
+            'requests' => $requests_to_return,
             'summary' => [
-                'total_requests' => count($requests),
+                'total_requests' => count($requests_to_return),
                 'total_amount' => $total_amount,
-                'approved_amount' => $approved_amount,
+                'approved_amount' => 0, // Never include approved amount in summary
                 'pending_amount' => $pending_amount,
                 'rejected_amount' => $rejected_amount
             ]
