@@ -17,7 +17,7 @@ function isActiveMenu($page, $currentPage, $currentDir = '') {
 $currentDirName = basename(dirname($_SERVER['PHP_SELF']));
 $basePath = '';
 
-if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports', 'settings', 'tasks', 'salary'])) {
+if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports', 'settings', 'tasks', 'salary','leave'])) {
     $basePath = '../../';
 } else {
     $basePath = '';
@@ -149,10 +149,10 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                     <span>Leave Management</span>
                 </div>
             </li>
-            
+
             <li class="menu-item">
                 <a href="<?php echo $basePath; ?>pages/leave/index.php" class="menu-link <?php 
-                    echo (strpos($_SERVER['REQUEST_URI'], '/leave_requests/') !== false) ? 
+                    echo (strpos($_SERVER['REQUEST_URI'], '/leave/') !== false) ? 
                     'active' : ''; ?>" data-tooltip="Leave Requests">
                     <div class="menu-icon-wrapper">
                         <i class="fas fa-calendar-check menu-icon"></i>
