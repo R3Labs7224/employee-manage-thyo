@@ -1,0 +1,14 @@
+# Allow access to image files
+<FilesMatch "\.(jpg|jpeg|png|gif|webp)$">
+    Allow from all
+</FilesMatch>
+
+# Deny access to PHP files in uploads
+<FilesMatch "\.php$">
+    Deny from all
+</FilesMatch>
+
+# Deny access to executable files
+<FilesMatch "\.(exe|bat|sh|pl|py|cgi)$">
+    Deny from all
+</FilesMatch>

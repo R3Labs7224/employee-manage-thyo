@@ -143,6 +143,25 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                     <div class="menu-indicator"></div>
                 </a>
             </li>
+            <li class="menu-section">
+                <div class="section-title">
+                    <i class="fas fa-calendar-alt"></i>
+                    <span>Leave Management</span>
+                </div>
+            </li>
+            
+            <li class="menu-item">
+                <a href="<?php echo $basePath; ?>pages/leave/index.php" class="menu-link <?php 
+                    echo (strpos($_SERVER['REQUEST_URI'], '/leave_requests/') !== false) ? 
+                    'active' : ''; ?>" data-tooltip="Leave Requests">
+                    <div class="menu-icon-wrapper">
+                        <i class="fas fa-calendar-check menu-icon"></i>
+                    </div>
+                    <span class="menu-text">Leave Requests</span>
+                    <div class="menu-indicator"></div>
+                </a>
+            </li>
+
 
             <!-- Settings Section -->
             <li class="menu-section">
