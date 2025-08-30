@@ -71,7 +71,8 @@ function getLeaveRequests($pdo, $employee) {
         $count_stmt->execute($params);
         $total = (int)$count_stmt->fetchColumn();
         
-        // Get leave requests with approver details
+        // Get leave requests with approver details - FIXED QUERY
+        // Using string concatenation for LIMIT/OFFSET to avoid PDO quoting issues
         $sql = "
             SELECT lr.id, lr.start_date, lr.end_date, lr.leave_type, lr.reason, 
                    lr.total_days, lr.status, lr.created_at, lr.updated_at,
@@ -87,11 +88,9 @@ function getLeaveRequests($pdo, $employee) {
             LEFT JOIN users r ON lr.rejected_by = r.id
             WHERE " . implode(' AND ', $where_conditions) . "
             ORDER BY lr.created_at DESC
-            LIMIT ? OFFSET ?
-        ";
+            LIMIT " . $limit . " OFFSET " . $offset;
         
-        $params[] = $limit;
-        $params[] = $offset;
+        // Don't add limit and offset to params - they're directly in the query
         
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
