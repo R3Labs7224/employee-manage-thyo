@@ -336,10 +336,7 @@ try {
                                             </td>
                                             
                                             <td class="actions-column">
-                                                <a href="view.php?id=<?php echo $employee['id']; ?>" 
-                                                   class="btn btn-sm btn-info" title="View Details">
-                                                    <i class="fas fa-eye"></i>
-                                                </a>
+                                               
                                                 
                                                 <?php if (hasPermission('superadmin')): ?>
                                                     <a href="edit.php?id=<?php echo $employee['id']; ?>" 

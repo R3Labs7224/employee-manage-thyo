@@ -8,6 +8,48 @@ requireLogin();
 $pageTitle = 'Leave Requests Management';
 $message = '';
 
+// Handle delete actions
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_action'])) {
+    $user = getUser();
+    
+    // Check if user has permission to delete
+    if (!hasPermission('superadmin') && $user['role'] !== 'hr') {
+        $message = '<div class="alert alert-error">You do not have permission to delete leave requests.</div>';
+    } else {
+        try {
+            if ($_POST['delete_action'] === 'single') {
+                $request_id = (int)$_POST['request_id'];
+                
+                // Delete single request
+                $stmt = $pdo->prepare("DELETE FROM leave_requests WHERE id = ?");
+                $stmt->execute([$request_id]);
+                
+                if ($stmt->rowCount() > 0) {
+                    $message = '<div class="alert alert-success">Leave request deleted successfully!</div>';
+                } else {
+                    $message = '<div class="alert alert-error">Leave request not found or already deleted.</div>';
+                }
+                
+            } elseif ($_POST['delete_action'] === 'multiple') {
+                $request_ids = $_POST['selected_requests'] ?? [];
+                
+                if (empty($request_ids)) {
+                    $message = '<div class="alert alert-error">No requests selected for deletion.</div>';
+                } else {
+                    $placeholders = str_repeat('?,', count($request_ids) - 1) . '?';
+                    $stmt = $pdo->prepare("DELETE FROM leave_requests WHERE id IN ($placeholders)");
+                    $stmt->execute($request_ids);
+                    
+                    $deleted_count = $stmt->rowCount();
+                    $message = "<div class='alert alert-success'>$deleted_count leave request(s) deleted successfully!</div>";
+                }
+            }
+        } catch (PDOException $e) {
+            $message = '<div class="alert alert-error">Error deleting leave request(s).</div>';
+        }
+    }
+}
+
 // Handle approval/rejection actions
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
     $request_id = (int)$_POST['request_id'];
@@ -121,16 +163,20 @@ try {
 $user = getUser();
 $can_approve_l1 = hasPermission('supervisor');
 $can_approve_l2 = hasPermission('superadmin') || $user['role'] === 'hr';
+$can_delete = hasPermission('superadmin') || $user['role'] === 'hr';
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo $pageTitle; ?> - EMS</title>
+    <title><?php echo $pageTitle; ?> - Employee Management System</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="../../assets/images/logo.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../../assets/images/logo.png">
+    <link rel="shortcut icon" href="../../assets/images/logo.png">
+    <link rel="apple-touch-icon" href="../../assets/images/logo.png">
     <link rel="stylesheet" href="../../assets/css/style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         .filters-section {
             background: #f8f9fa;
@@ -201,11 +247,30 @@ $can_approve_l2 = hasPermission('superadmin') || $user['role'] === 'hr';
         }
         .modal-content {
             background-color: white;
-            margin: 15% auto;
-            padding: 2rem;
-            border-radius: 8px;
+            margin: 50px auto;
+            padding: 20px;
+            border: 1px solid #ccc;
             width: 90%;
             max-width: 500px;
+        }
+        .bulk-actions {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background: #f9fafb;
+            border-radius: 8px;
+            border-left: 4px solid #3b82f6;
+        }
+        .bulk-actions-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .select-all-container {
+            margin-bottom: 0.5rem;
+        }
+        .selected-count {
+            color: #3b82f6;
+            font-weight: 500;
         }
         @media (max-width: 768px) {
             .filters-row {
@@ -243,9 +308,8 @@ $can_approve_l2 = hasPermission('superadmin') || $user['role'] === 'hr';
                             <select name="employee" id="employee" class="form-control">
                                 <option value="">All Employees</option>
                                 <?php foreach ($employees as $employee): ?>
-                                    <option value="<?php echo $employee['id']; ?>" 
-                                            <?php echo $employee_filter == $employee['id'] ? 'selected' : ''; ?>>
-                                        <?php echo htmlspecialchars($employee['employee_code'] . ' - ' . $employee['name']); ?>
+                                    <option value="<?php echo $employee['id']; ?>" <?php echo $employee_filter == $employee['id'] ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($employee['name'] . ' (' . $employee['employee_code'] . ')'); ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -253,26 +317,41 @@ $can_approve_l2 = hasPermission('superadmin') || $user['role'] === 'hr';
                         
                         <div class="form-group">
                             <label for="date_from">From Date</label>
-                            <input type="date" name="date_from" id="date_from" 
-                                   value="<?php echo htmlspecialchars($date_from); ?>" class="form-control">
+                            <input type="date" name="date_from" id="date_from" class="form-control" value="<?php echo $date_from; ?>">
                         </div>
                         
                         <div class="form-group">
                             <label for="date_to">To Date</label>
-                            <input type="date" name="date_to" id="date_to" 
-                                   value="<?php echo htmlspecialchars($date_to); ?>" class="form-control">
+                            <input type="date" name="date_to" id="date_to" class="form-control" value="<?php echo $date_to; ?>">
                         </div>
                         
                         <div class="form-group">
                             <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-filter"></i> Filter
+                                <i class="fas fa-search"></i> Filter
                             </button>
-                            <a href="?" class="btn btn-secondary">
+                            <a href="<?php echo $_SERVER['PHP_SELF']; ?>" class="btn btn-secondary">
                                 <i class="fas fa-times"></i> Clear
                             </a>
                         </div>
                     </form>
                 </div>
+
+                <?php if ($can_delete && !empty($leave_requests)): ?>
+                <!-- Bulk Actions Section -->
+                <div class="bulk-actions" id="bulkActions" style="display: none;">
+                    <div class="select-all-container">
+                        <label>
+                            <input type="checkbox" id="selectAll"> Select All
+                        </label>
+                        <span class="selected-count" id="selectedCount">0 selected</span>
+                    </div>
+                    <div class="bulk-actions-buttons">
+                        <button type="button" class="btn btn-danger btn-sm" onclick="deleteSelected()">
+                            <i class="fas fa-trash"></i> Delete Selected
+                        </button>
+                    </div>
+                </div>
+                <?php endif; ?>
                 
                 <div class="card">
                     <div class="card-header">
@@ -290,6 +369,11 @@ $can_approve_l2 = hasPermission('superadmin') || $user['role'] === 'hr';
                                 <table class="table">
                                     <thead>
                                         <tr>
+                                            <?php if ($can_delete): ?>
+                                            <th width="30">
+                                                <input type="checkbox" id="masterCheckbox" onchange="toggleSelectAll()">
+                                            </th>
+                                            <?php endif; ?>
                                             <th>Employee</th>
                                             <th>Leave Dates</th>
                                             <th>Type</th>
@@ -302,6 +386,11 @@ $can_approve_l2 = hasPermission('superadmin') || $user['role'] === 'hr';
                                     <tbody>
                                         <?php foreach ($leave_requests as $request): ?>
                                             <tr>
+                                                <?php if ($can_delete): ?>
+                                                <td>
+                                                    <input type="checkbox" class="request-checkbox" value="<?php echo $request['id']; ?>" onchange="updateSelectedCount()">
+                                                </td>
+                                                <?php endif; ?>
                                                 <td>
                                                     <strong><?php echo htmlspecialchars($request['employee_name']); ?></strong><br>
                                                     <small class="text-muted"><?php echo htmlspecialchars($request['employee_code']); ?></small>
@@ -354,6 +443,12 @@ $can_approve_l2 = hasPermission('superadmin') || $user['role'] === 'hr';
                                                                 <i class="fas fa-times"></i>
                                                             </button>
                                                         <?php endif; ?>
+
+                                                        <?php if ($can_delete): ?>
+                                                            <button class="btn btn-danger btn-sm" onclick="deleteSingle(<?php echo $request['id']; ?>, '<?php echo addslashes($request['employee_name']); ?>')">
+                                                                <i class="fas fa-trash"></i>
+                                                            </button>
+                                                        <?php endif; ?>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -398,6 +493,9 @@ $can_approve_l2 = hasPermission('superadmin') || $user['role'] === 'hr';
         </div>
     </div>
 
+    <!-- Delete Confirmation Modal -->
+    <!-- Removed - Using browser confirm() instead -->
+
     <script>
         function approveL1(requestId) {
             openModal('L1 Approval - Site Manager', requestId, 'approve_l1');
@@ -424,19 +522,20 @@ $can_approve_l2 = hasPermission('superadmin') || $user['role'] === 'hr';
         }
 
         function viewDetails(requestId) {
-            // Find the request data (you'd normally fetch this via AJAX)
+            // Find the request data
             const row = event.target.closest('tr');
             const cells = row.querySelectorAll('td');
+            const employeeCol = <?php echo $can_delete ? '1' : '0'; ?>;
             
             const details = `
                 <div style="line-height: 1.6;">
-                    <strong>Employee:</strong> ${cells[0].querySelector('strong').textContent}<br>
-                    <strong>Employee Code:</strong> ${cells[0].querySelector('small').textContent}<br>
-                    <strong>Leave Dates:</strong> ${cells[1].querySelector('strong').textContent} ${cells[1].querySelector('small').textContent}<br>
-                    <strong>Type:</strong> ${cells[2].textContent.trim()}<br>
-                    <strong>Total Days:</strong> ${cells[3].textContent}<br>
-                    <strong>Reason:</strong> ${cells[4].getAttribute('title')}<br>
-                    <strong>Status:</strong> ${cells[5].textContent.trim()}<br>
+                    <strong>Employee:</strong> ${cells[employeeCol].querySelector('strong').textContent}<br>
+                    <strong>Employee Code:</strong> ${cells[employeeCol].querySelector('small').textContent}<br>
+                    <strong>Leave Dates:</strong> ${cells[employeeCol + 1].querySelector('strong').textContent} ${cells[employeeCol + 1].querySelector('small').textContent}<br>
+                    <strong>Type:</strong> ${cells[employeeCol + 2].textContent.trim()}<br>
+                    <strong>Total Days:</strong> ${cells[employeeCol + 3].textContent}<br>
+                    <strong>Reason:</strong> ${cells[employeeCol + 4].getAttribute('title')}<br>
+                    <strong>Status:</strong> ${cells[employeeCol + 5].textContent.trim()}<br>
                 </div>
             `;
             
@@ -446,6 +545,82 @@ $can_approve_l2 = hasPermission('superadmin') || $user['role'] === 'hr';
 
         function closeDetailsModal() {
             document.getElementById('detailsModal').style.display = 'none';
+        }
+
+        function deleteSingle(requestId, employeeName) {
+            if (confirm(`Are you sure you want to delete the leave request for ${employeeName}?\n\nWarning: This action cannot be undone.`)) {
+                // Create and submit form
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.innerHTML = `
+                    <input type="hidden" name="delete_action" value="single">
+                    <input type="hidden" name="request_id" value="${requestId}">
+                `;
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
+
+        function deleteSelected() {
+            const selectedCheckboxes = document.querySelectorAll('.request-checkbox:checked');
+            if (selectedCheckboxes.length === 0) {
+                alert('Please select at least one request to delete.');
+                return;
+            }
+
+            const requestIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+            
+            if (confirm(`Are you sure you want to delete ${requestIds.length} leave request(s)?\n\nWarning: This action cannot be undone.`)) {
+                // Create and submit form
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.innerHTML = `<input type="hidden" name="delete_action" value="multiple">`;
+                
+                // Add selected request IDs as hidden inputs
+                requestIds.forEach(id => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'selected_requests[]';
+                    input.value = id;
+                    form.appendChild(input);
+                });
+                
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
+
+        function toggleSelectAll() {
+            const masterCheckbox = document.getElementById('masterCheckbox');
+            const checkboxes = document.querySelectorAll('.request-checkbox');
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = masterCheckbox.checked;
+            });
+            
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            const selectedCheckboxes = document.querySelectorAll('.request-checkbox:checked');
+            const count = selectedCheckboxes.length;
+            const totalCheckboxes = document.querySelectorAll('.request-checkbox').length;
+            
+            document.getElementById('selectedCount').textContent = `${count} selected`;
+            document.getElementById('bulkActions').style.display = count > 0 ? 'block' : 'none';
+            
+            // Update master checkbox state
+            const masterCheckbox = document.getElementById('masterCheckbox');
+            if (count === 0) {
+                masterCheckbox.indeterminate = false;
+                masterCheckbox.checked = false;
+            } else if (count === totalCheckboxes) {
+                masterCheckbox.indeterminate = false;
+                masterCheckbox.checked = true;
+            } else {
+                masterCheckbox.indeterminate = true;
+                masterCheckbox.checked = false;
+            }
         }
 
         // Close modals when clicking outside
