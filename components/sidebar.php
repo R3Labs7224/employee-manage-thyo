@@ -172,7 +172,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
             </li>
 
             <li class="menu-item">
-                <a href="<?php echo $basePath; ?>pages/settings/departments.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/settings/') !== false) ? 'active' : ''; ?>" data-tooltip="System Settings">
+                <a href="<?php echo $basePath; ?>pages/settings" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/settings/') !== false) ? 'active' : ''; ?>" data-tooltip="System Settings">
                     <div class="menu-icon-wrapper">
                         <i class="fas fa-cog menu-icon"></i>
                     </div>
