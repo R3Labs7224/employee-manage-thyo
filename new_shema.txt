@@ -1,0 +1,100 @@
+-- phpMyAdmin SQL Dump
+-- version 5.2.1
+-- https://www.phpmyadmin.net/
+--
+-- Host: localhost
+-- Generation Time: Sep 19, 2025 at 05:36 PM
+-- Server version: 10.4.28-MariaDB
+-- PHP Version: 8.2.4
+
+SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
+START TRANSACTION;
+SET time_zone = "+00:00";
+
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8mb4 */;
+
+--
+-- Database: `employee_management_system`
+--
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `users`
+--
+
+CREATE TABLE `users` (
+  `id` int(11) NOT NULL,
+  `username` varchar(50) NOT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  `password` varchar(255) NOT NULL,
+  `role` enum('superadmin','admin','supervisor','employee') NOT NULL,
+  `status` enum('active','inactive') DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `admin_role_id` int(11) DEFAULT NULL,
+  `created_by` int(11) DEFAULT NULL,
+  `is_admin` tinyint(1) DEFAULT 0,
+  `last_login` timestamp NULL DEFAULT NULL,
+  `account_locked` tinyint(1) DEFAULT 0,
+  `failed_login_attempts` int(11) DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `users`
+--
+
+INSERT INTO `users` (`id`, `username`, `email`, `password`, `role`, `status`, `created_at`, `updated_at`, `admin_role_id`, `created_by`, `is_admin`, `last_login`, `account_locked`, `failed_login_attempts`) VALUES
+(1, 'admin', 'admin@company.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'superadmin', 'active', '2025-08-07 20:16:30', '2025-09-19 05:02:06', 1, NULL, 1, NULL, 0, 0),
+(3, 'testadmin', NULL, '$2y$10$JhzFEoyBQrVmd0B4iLaS2ukKJL8W1PS0CyrihdUmbmWnNTtX/rBY2', 'admin', 'active', '2025-09-19 06:51:21', '2025-09-19 06:51:21', 4, 1, 1, NULL, 0, 0),
+(4, 'rabi', 'rabi@gmail.com', '$2y$10$b.8uyuUnANROpu3v0s0nyeNFhmR82G3ZZJ0qZbcFG4vLx4vI3YURu', 'admin', 'active', '2025-09-19 07:20:02', '2025-09-19 07:27:11', 4, 1, 1, NULL, 0, 0),
+(5, 'rahul_002', 'rahul@gmail.com', '$2y$10$0OmJdYPn.yuaXOHoesLHcuhswEbpR.SIYKZvDkyJfNCm1Ibo1A9Pq', 'employee', 'active', '2025-09-19 15:26:50', '2025-09-19 15:26:50', NULL, NULL, 0, NULL, 0, 0),
+(6, 'raj_003', 'raj@gmail.com', '$2y$10$0OmJdYPn.yuaXOHoesLHcuhswEbpR.SIYKZvDkyJfNCm1Ibo1A9Pq', 'employee', 'active', '2025-09-19 15:26:50', '2025-09-19 15:26:50', NULL, NULL, 0, NULL, 0, 0),
+(7, 'rah_005', 'rah@gmail.com', '$2y$10$0OmJdYPn.yuaXOHoesLHcuhswEbpR.SIYKZvDkyJfNCm1Ibo1A9Pq', 'employee', 'active', '2025-09-19 15:26:50', '2025-09-19 15:26:50', NULL, NULL, 0, NULL, 0, 0);
+
+--
+-- Indexes for dumped tables
+--
+
+--
+-- Indexes for table `users`
+--
+ALTER TABLE `users`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `username` (`username`),
+  ADD UNIQUE KEY `email` (`email`),
+  ADD KEY `idx_users_role` (`role`),
+  ADD KEY `idx_users_admin_role_id` (`admin_role_id`),
+  ADD KEY `idx_users_is_admin` (`is_admin`),
+  ADD KEY `idx_users_status` (`status`),
+  ADD KEY `fk_users_created_by` (`created_by`);
+
+--
+-- AUTO_INCREMENT for dumped tables
+--
+
+--
+-- AUTO_INCREMENT for table `users`
+--
+ALTER TABLE `users`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+
+--
+-- Constraints for dumped tables
+--
+
+--
+-- Constraints for table `users`
+--
+ALTER TABLE `users`
+  ADD CONSTRAINT `fk_users_admin_role` FOREIGN KEY (`admin_role_id`) REFERENCES `admin_roles` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_users_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`);
+COMMIT;
+
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;

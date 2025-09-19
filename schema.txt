@@ -1,0 +1,694 @@
+-- phpMyAdmin SQL Dump
+-- version 5.2.1
+-- https://www.phpmyadmin.net/
+--
+-- Host: localhost
+-- Generation Time: Sep 19, 2025 at 09:03 AM
+-- Server version: 10.4.28-MariaDB
+-- PHP Version: 8.2.4
+
+SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
+START TRANSACTION;
+SET time_zone = "+00:00";
+
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8mb4 */;
+
+--
+-- Database: `employee_management_system`
+--
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `activity_logs`
+--
+
+CREATE TABLE `activity_logs` (
+  `id` int(11) NOT NULL,
+  `employee_id` int(11) NOT NULL,
+  `action` varchar(100) NOT NULL,
+  `details` text DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `activity_logs`
+--
+
+INSERT INTO `activity_logs` (`id`, `employee_id`, `action`, `details`, `ip_address`, `user_agent`, `created_at`) VALUES
+(1, 2, 'logout', 'Mobile app logout', NULL, NULL, '2025-08-17 05:45:08'),
+(2, 3, 'logout', 'Mobile app logout', NULL, NULL, '2025-08-17 06:25:59'),
+(3, 2, 'logout', 'Mobile app logout', NULL, NULL, '2025-08-17 13:54:51'),
+(4, 4, 'logout', 'Mobile app logout', NULL, NULL, '2025-08-30 05:18:34'),
+(5, 4, 'leave_request_created', 'Leave request created for 2025-09-01 to 2025-09-03 (unpaid, 3 days)', NULL, NULL, '2025-08-30 05:26:52'),
+(6, 4, 'leave_request_created', 'Leave request created for 2025-08-31 to 2025-09-02 (unpaid, 3 days)', NULL, NULL, '2025-08-30 06:32:52');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `admin_audit_log`
+--
+
+CREATE TABLE `admin_audit_log` (
+  `id` int(11) NOT NULL,
+  `admin_user_id` int(11) NOT NULL,
+  `action` varchar(100) NOT NULL,
+  `target_type` varchar(50) DEFAULT NULL,
+  `target_id` int(11) DEFAULT NULL,
+  `details` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`details`)),
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `admin_audit_log`
+--
+
+INSERT INTO `admin_audit_log` (`id`, `admin_user_id`, `action`, `target_type`, `target_id`, `details`, `ip_address`, `user_agent`, `created_at`) VALUES
+(1, 1, 'create_admin', 'user', 2, '{\"username\":\"testadmin1758262691\",\"admin_role_id\":3}', '::1', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36', '2025-09-19 06:31:37'),
+(2, 1, 'create_admin', 'user', 3, '{\"username\":\"testadmin\",\"admin_role_id\":4}', '::1', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36', '2025-09-19 06:51:21');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `admin_roles`
+--
+
+CREATE TABLE `admin_roles` (
+  `id` int(11) NOT NULL,
+  `role_name` varchar(50) NOT NULL,
+  `display_name` varchar(100) NOT NULL,
+  `description` text DEFAULT NULL,
+  `permissions` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`permissions`)),
+  `is_active` tinyint(1) DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `admin_roles`
+--
+
+INSERT INTO `admin_roles` (`id`, `role_name`, `display_name`, `description`, `permissions`, `is_active`, `created_at`, `updated_at`) VALUES
+(1, 'superadmin', 'Super Administrator', 'Full system access with ability to manage other admins', '[\"all_permissions\"]', 1, '2025-09-19 05:02:06', '2025-09-19 05:02:06'),
+(2, 'admin_full', 'Full Administrator', 'Full access to all employee management features', '[\"employees.view\", \"employees.create\", \"employees.edit\", \"employees.delete\", \"attendance.view\", \"attendance.manage\", \"petty_cash.view\", \"petty_cash.approve\", \"salary.view\", \"salary.manage\", \"tasks.view\", \"tasks.manage\", \"reports.view\", \"leave.view\", \"leave.approve\", \"settings.view\"]', 1, '2025-09-19 05:02:06', '2025-09-19 05:02:06'),
+(3, 'admin_hr', 'HR Administrator', 'Human Resources focused administration', '[\"employees.view\", \"employees.create\", \"employees.edit\", \"attendance.view\", \"leave.view\", \"leave.approve\", \"reports.view\"]', 1, '2025-09-19 05:02:06', '2025-09-19 05:02:06'),
+(4, 'admin_finance', 'Finance Administrator', 'Finance and payroll focused administration', '[\"salary.view\", \"salary.manage\", \"petty_cash.view\", \"petty_cash.approve\", \"reports.view\"]', 1, '2025-09-19 05:02:06', '2025-09-19 05:02:06'),
+(5, 'admin_operations', 'Operations Administrator', 'Operations and task management focused administration', '[\"tasks.view\", \"tasks.manage\", \"attendance.view\", \"attendance.manage\", \"reports.view\"]', 1, '2025-09-19 05:02:06', '2025-09-19 05:02:06');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `attendance`
+--
+
+CREATE TABLE `attendance` (
+  `id` int(11) NOT NULL,
+  `employee_id` int(11) NOT NULL,
+  `site_id` int(11) NOT NULL,
+  `check_in_latitude` decimal(10,8) DEFAULT NULL,
+  `check_in_longitude` decimal(11,8) DEFAULT NULL,
+  `check_out_latitude` decimal(10,8) DEFAULT NULL,
+  `check_out_longitude` decimal(11,8) DEFAULT NULL,
+  `session_type` enum('full_day','partial') DEFAULT 'partial',
+  `status` enum('pending','approved','rejected') DEFAULT 'pending',
+  `approved_by` int(11) DEFAULT NULL,
+  `approval_date` datetime DEFAULT NULL,
+  `date` date NOT NULL,
+  `session_number` int(11) DEFAULT 1,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `attendance`
+--
+
+INSERT INTO `attendance` (`id`, `employee_id`, `site_id`, `check_in_latitude`, `check_in_longitude`, `check_out_latitude`, `check_out_longitude`, `session_type`, `status`, `approved_by`, `approval_date`, `date`, `session_number`, `notes`, `created_at`, `updated_at`) VALUES
+(1, 2, 1, 21.52162950, 86.89994160, NULL, NULL, 'partial', 'approved', 1, '2025-08-12 11:55:50', '2025-08-12', 1, NULL, '2025-08-12 06:25:22', '2025-08-12 06:25:50'),
+(2, 2, 1, 21.52162930, 86.89994250, 21.52163110, 86.89993710, 'partial', 'approved', 1, '2025-08-16 15:31:02', '2025-08-16', 1, NULL, '2025-08-16 09:07:31', '2025-08-16 10:01:02'),
+(3, 2, 1, 21.52162980, 86.89994040, 21.52163000, 86.89993940, 'partial', 'approved', 1, '2025-08-17 19:12:18', '2025-08-17', 1, NULL, '2025-08-17 05:39:16', '2025-08-17 13:42:18'),
+(4, 2, 1, 21.52153140, 86.89997600, 21.52162930, 86.89994040, 'partial', 'approved', 1, '2025-08-17 19:12:15', '2025-08-17', 1, NULL, '2025-08-17 05:39:50', '2025-08-17 13:42:15'),
+(5, 2, 1, 21.52162970, 86.89993970, NULL, NULL, 'partial', 'approved', 1, '2025-08-28 08:53:35', '2025-08-17', 1, NULL, '2025-08-17 05:44:09', '2025-08-28 03:23:35'),
+(6, 3, 1, 21.52163110, 86.89993710, 21.52162920, 86.89994230, 'partial', 'approved', 1, '2025-08-17 22:23:07', '2025-08-17', 1, NULL, '2025-08-17 05:57:32', '2025-08-17 16:53:07'),
+(7, 3, 1, 21.52163000, 86.89994010, NULL, NULL, 'partial', 'approved', 1, '2025-08-28 08:53:32', '2025-08-17', 1, NULL, '2025-08-17 14:20:27', '2025-08-28 03:23:32'),
+(8, 4, 1, 21.52168200, 86.89994060, 21.52168200, 86.89994100, 'partial', 'approved', 1, '2025-08-29 23:53:42', '2025-08-29', 1, NULL, '2025-08-29 17:21:56', '2025-08-29 18:23:51'),
+(9, 4, 1, 21.52164250, 86.89996070, NULL, NULL, 'partial', 'pending', NULL, NULL, '2025-08-29', 1, NULL, '2025-08-29 18:27:25', '2025-08-29 18:27:25'),
+(10, 4, 1, 21.52163910, 86.89996370, NULL, NULL, 'partial', 'pending', NULL, NULL, '2025-08-30', 1, NULL, '2025-08-30 06:17:02', '2025-08-30 06:17:02');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `attendance_sessions`
+--
+
+CREATE TABLE `attendance_sessions` (
+  `id` int(11) NOT NULL,
+  `employee_id` int(11) NOT NULL,
+  `site_id` int(11) NOT NULL,
+  `date` date NOT NULL,
+  `session_number` int(11) NOT NULL DEFAULT 1,
+  `check_in_time` time DEFAULT NULL,
+  `check_out_time` time DEFAULT NULL,
+  `check_in_latitude` decimal(10,8) DEFAULT NULL,
+  `check_in_longitude` decimal(11,8) DEFAULT NULL,
+  `check_out_latitude` decimal(10,8) DEFAULT NULL,
+  `check_out_longitude` decimal(11,8) DEFAULT NULL,
+  `check_in_selfie` varchar(255) DEFAULT NULL,
+  `check_out_selfie` varchar(255) DEFAULT NULL,
+  `total_hours` decimal(5,2) DEFAULT NULL,
+  `status` enum('pending','approved','rejected') DEFAULT 'pending',
+  `approved_by` int(11) DEFAULT NULL,
+  `approval_date` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `departments`
+--
+
+CREATE TABLE `departments` (
+  `id` int(11) NOT NULL,
+  `name` varchar(100) NOT NULL,
+  `description` text DEFAULT NULL,
+  `status` enum('active','inactive') DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `departments`
+--
+
+INSERT INTO `departments` (`id`, `name`, `description`, `status`, `created_at`) VALUES
+(1, 'Operations', 'Operations Department', 'active', '2025-08-07 20:16:30'),
+(2, 'Administration', 'Administration Department', 'active', '2025-08-07 20:16:30'),
+(3, 'Maintenance', 'Maintenance Department', 'active', '2025-08-07 20:16:30'),
+(4, 'Check', 'Checking', 'active', '2025-08-07 20:46:02'),
+(5, 'Check', 'Checking', 'active', '2025-08-07 20:46:05');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `employees`
+--
+
+CREATE TABLE `employees` (
+  `id` int(11) NOT NULL,
+  `employee_code` varchar(20) NOT NULL,
+  `name` varchar(100) NOT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  `contact_number` varchar(15) NOT NULL COMMENT 'Primary Contact Number',
+  `password` varchar(255) NOT NULL,
+  `department_id` int(11) DEFAULT NULL,
+  `shift_id` int(11) DEFAULT NULL,
+  `site_id` int(11) DEFAULT NULL,
+  `basic_salary` decimal(10,2) DEFAULT 0.00,
+  `epf_number` varchar(50) DEFAULT NULL,
+  `daily_wage` decimal(8,2) DEFAULT 0.00,
+  `joining_date` date NOT NULL,
+  `status` enum('active','inactive') DEFAULT 'active',
+  `profile_image` varchar(255) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `uan_number` varchar(12) DEFAULT NULL COMMENT 'UAN Number',
+  `esic_number` varchar(17) DEFAULT NULL COMMENT 'ESIC Number',
+  `aadhar_number` varchar(12) DEFAULT NULL COMMENT 'Aadhar Number',
+  `pan_number` varchar(10) DEFAULT NULL COMMENT 'PAN Number',
+  `designation` varchar(100) DEFAULT NULL COMMENT 'Employee Designation',
+  `reporting_manager_id` int(11) DEFAULT NULL COMMENT 'Reporting Manager Employee ID',
+  `emergency_contact_number` varchar(15) DEFAULT NULL COMMENT 'Emergency Contact Number',
+  `date_of_birth` date DEFAULT NULL COMMENT 'Date of Birth',
+  `qualification` varchar(200) DEFAULT NULL COMMENT 'Educational Qualification',
+  `total_experience` decimal(4,2) DEFAULT NULL COMMENT 'Total Experience in Years',
+  `nationality` varchar(50) DEFAULT 'Indian' COMMENT 'Nationality',
+  `religion` varchar(50) DEFAULT NULL COMMENT 'Religion',
+  `marital_status` enum('single','married','divorced','widowed') DEFAULT NULL COMMENT 'Marital Status',
+  `gender` enum('male','female','other') DEFAULT NULL COMMENT 'Gender',
+  `blood_group` enum('A+','A-','B+','B-','AB+','AB-','O+','O-') DEFAULT NULL COMMENT 'Blood Group',
+  `photograph` varchar(255) DEFAULT NULL COMMENT 'Profile Photo Path',
+  `current_address` text DEFAULT NULL COMMENT 'Current Address',
+  `permanent_address` text DEFAULT NULL COMMENT 'Permanent Address',
+  `last_working_day` date DEFAULT NULL COMMENT 'Last Working Day',
+  `reason_of_separation` text DEFAULT NULL COMMENT 'Reason for Separation'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `employees`
+--
+
+INSERT INTO `employees` (`id`, `employee_code`, `name`, `email`, `contact_number`, `password`, `department_id`, `shift_id`, `site_id`, `basic_salary`, `epf_number`, `daily_wage`, `joining_date`, `status`, `profile_image`, `created_at`, `updated_at`, `uan_number`, `esic_number`, `aadhar_number`, `pan_number`, `designation`, `reporting_manager_id`, `emergency_contact_number`, `date_of_birth`, `qualification`, `total_experience`, `nationality`, `religion`, `marital_status`, `gender`, `blood_group`, `photograph`, `current_address`, `permanent_address`, `last_working_day`, `reason_of_separation`) VALUES
+(1, '001', 'Rabi Ranjan', 'rabi@gmail.com', '7077942124', '$2y$10$GNhnQzvQQ8.U45TT4G62leD2frJ6Cvt2q5qd9NjPs8InBFw401Mbm', 2, 2, 2, 10000.00, 'fwdver4245', 900.00, '2025-02-23', 'active', NULL, '2025-08-07 20:28:42', '2025-08-07 20:28:42', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Indian', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+(2, '002', 'Rahul', 'rahul@gmail.com', '7077942124', '$2y$10$rap90Bcy.1.5uyeIFjvRq.veYuK/Nz/RCxqQTP92IxOjpW2QapvDa', 2, 2, 1, 23000.00, 'qwdfv3rbwfb', 370.00, '2025-01-10', 'active', NULL, '2025-08-10 03:50:25', '2025-08-10 03:50:25', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Indian', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+(3, '003', 'Raj Dev', 'raj@gmail.com', '9998899988', '$2y$10$BC49cdbHEuxJrk2AIxtaW.OnAXQFaukU8UZJtlWzpe7dshl5B6qjO', 4, 1, 1, 2000.00, 'dsgbdsbv', 300.00, '2025-08-12', 'active', NULL, '2025-08-17 05:45:04', '2025-08-17 05:45:04', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Indian', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+(4, '005', 'Rahul Check', 'rah@gmail.com', '9988009977', '$2y$10$2hFgyqFK1QGUQj7gp.5hq.0hEO6Zvo.uBbX.kuJuMMIKKFVfp4t2e', 2, 1, 1, 10000.00, 'wcd2342343234fwedw', 500.00, '2025-08-01', 'active', NULL, '2025-08-28 04:20:41', '2025-08-29 12:59:12', '213432342342', '24332453555231231', '123434552345', 'FBMPR2342R', 'HO', 2, '7077943355', '2002-01-01', 'BA', 4.00, 'Indian', 'Hindu', 'married', 'male', 'A+', 'uploads/employees/photos/005_1756396237.png', 'BBSR', '', '2025-07-31', 'Job Change');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `leave_requests`
+--
+
+CREATE TABLE `leave_requests` (
+  `id` int(11) NOT NULL,
+  `employee_id` int(11) NOT NULL,
+  `start_date` date NOT NULL,
+  `end_date` date NOT NULL,
+  `leave_type` enum('paid','unpaid') NOT NULL DEFAULT 'unpaid',
+  `reason` text NOT NULL,
+  `total_days` int(11) NOT NULL,
+  `status` enum('pending','approved_l1','approved_l2','rejected') NOT NULL DEFAULT 'pending',
+  `l1_approved_by` int(11) DEFAULT NULL,
+  `l1_approval_date` datetime DEFAULT NULL,
+  `l1_comments` text DEFAULT NULL,
+  `l2_approved_by` int(11) DEFAULT NULL,
+  `l2_approval_date` datetime DEFAULT NULL,
+  `l2_comments` text DEFAULT NULL,
+  `rejected_by` int(11) DEFAULT NULL,
+  `rejection_date` datetime DEFAULT NULL,
+  `rejection_reason` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `petty_cash_requests`
+--
+
+CREATE TABLE `petty_cash_requests` (
+  `id` int(11) NOT NULL,
+  `employee_id` int(11) NOT NULL,
+  `amount` decimal(8,2) NOT NULL,
+  `reason` text NOT NULL,
+  `receipt_image` varchar(255) DEFAULT NULL,
+  `request_date` date NOT NULL,
+  `status` enum('pending','approved','rejected') DEFAULT 'pending',
+  `approved_by` int(11) DEFAULT NULL,
+  `approval_date` datetime DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `petty_cash_requests`
+--
+
+INSERT INTO `petty_cash_requests` (`id`, `employee_id`, `amount`, `reason`, `receipt_image`, `request_date`, `status`, `approved_by`, `approval_date`, `notes`, `created_at`, `updated_at`) VALUES
+(1, 2, 2000.00, 'healthy and happy', NULL, '2025-08-11', 'approved', 1, '2025-08-30 11:24:54', '', '2025-08-12 06:27:43', '2025-08-30 05:54:54'),
+(9, 4, 100.00, 'check Petty cash', NULL, '2025-08-30', 'approved', 1, '2025-08-30 11:25:06', '', '2025-08-30 05:54:47', '2025-08-30 05:55:06');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `salaries`
+--
+
+CREATE TABLE `salaries` (
+  `id` int(11) NOT NULL,
+  `employee_id` int(11) NOT NULL,
+  `month` tinyint(4) NOT NULL,
+  `year` year(4) NOT NULL,
+  `basic_salary` decimal(10,2) NOT NULL,
+  `hra` decimal(10,2) DEFAULT 0.00,
+  `other_allowances` decimal(10,2) DEFAULT 0.00,
+  `gross_salary` decimal(10,2) DEFAULT 0.00,
+  `special_allowance` decimal(10,2) DEFAULT 0.00,
+  `total_salary` decimal(10,2) DEFAULT 0.00,
+  `epf_employee` decimal(10,2) DEFAULT 0.00,
+  `esi_employee` decimal(10,2) DEFAULT 0.00,
+  `epf_employer` decimal(10,2) DEFAULT 0.00,
+  `esi_employer` decimal(10,2) DEFAULT 0.00,
+  `professional_tax` decimal(10,2) DEFAULT 0.00,
+  `tds` decimal(10,2) DEFAULT 0.00,
+  `gratuity` decimal(10,2) DEFAULT 0.00,
+  `ghi` decimal(10,2) DEFAULT 0.00,
+  `variable_bonus` decimal(10,2) DEFAULT 0.00,
+  `total_working_days` int(11) DEFAULT 0,
+  `present_days` int(11) DEFAULT 0,
+  `calculated_salary` decimal(10,2) DEFAULT 0.00,
+  `bonus` decimal(10,2) DEFAULT 0.00,
+  `advance` decimal(10,2) DEFAULT 0.00,
+  `deductions` decimal(10,2) DEFAULT 0.00,
+  `net_salary` decimal(10,2) DEFAULT 0.00,
+  `status` enum('draft','processed','paid') DEFAULT 'draft',
+  `generated_date` date DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `salaries`
+--
+
+INSERT INTO `salaries` (`id`, `employee_id`, `month`, `year`, `basic_salary`, `hra`, `other_allowances`, `gross_salary`, `special_allowance`, `total_salary`, `epf_employee`, `esi_employee`, `epf_employer`, `esi_employer`, `professional_tax`, `tds`, `gratuity`, `ghi`, `variable_bonus`, `total_working_days`, `present_days`, `calculated_salary`, `bonus`, `advance`, `deductions`, `net_salary`, `status`, `generated_date`, `created_at`) VALUES
+(1, 1, 9, '2026', 10000.00, 0.00, 0.00, 0.00, 0.00, 0.00, 1800.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 30, 0, 0.00, 0.00, 0.00, 1800.00, -1800.00, 'processed', '2025-08-12', '2025-08-12 10:10:03'),
+(2, 1, 8, '2025', 10000.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 31, 0, 0.00, 1000.00, 1000.00, 0.00, 0.00, 'processed', '2025-08-12', '2025-08-12 10:10:23');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `shifts`
+--
+
+CREATE TABLE `shifts` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) NOT NULL,
+  `start_time` time NOT NULL,
+  `end_time` time NOT NULL,
+  `status` enum('active','inactive') DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `shifts`
+--
+
+INSERT INTO `shifts` (`id`, `name`, `start_time`, `end_time`, `status`, `created_at`) VALUES
+(1, 'Morning Shift', '08:00:00', '17:00:00', 'active', '2025-08-07 20:16:30'),
+(2, 'Evening Shift', '18:00:00', '02:00:00', 'active', '2025-08-07 20:16:30');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `sites`
+--
+
+CREATE TABLE `sites` (
+  `id` int(11) NOT NULL,
+  `name` varchar(100) NOT NULL,
+  `address` text DEFAULT NULL,
+  `latitude` decimal(10,8) DEFAULT NULL,
+  `longitude` decimal(11,8) DEFAULT NULL,
+  `status` enum('active','inactive') DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `sites`
+--
+
+INSERT INTO `sites` (`id`, `name`, `address`, `latitude`, `longitude`, `status`, `created_at`) VALUES
+(1, 'Meinn Office', '124 Business Street, City', 29.61393910, 78.20902120, 'active', '2025-08-07 20:16:30'),
+(2, 'Site A', 'Industrial Area, Zone 1', 28.61293910, 77.20802120, 'active', '2025-08-07 20:16:30');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `tasks`
+--
+
+CREATE TABLE `tasks` (
+  `id` int(11) NOT NULL,
+  `employee_id` int(11) NOT NULL,
+  `site_id` int(11) NOT NULL,
+  `attendance_id` int(11) NOT NULL,
+  `title` varchar(200) NOT NULL,
+  `description` text DEFAULT NULL,
+  `task_image` varchar(255) DEFAULT NULL,
+  `start_time` datetime DEFAULT NULL,
+  `end_time` datetime DEFAULT NULL,
+  `latitude` decimal(10,8) DEFAULT NULL,
+  `longitude` decimal(11,8) DEFAULT NULL,
+  `status` enum('active','completed','cancelled') DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `completed_at` timestamp NULL DEFAULT NULL,
+  `completion_notes` text DEFAULT NULL,
+  `completion_latitude` decimal(10,8) DEFAULT NULL,
+  `completion_longitude` decimal(11,8) DEFAULT NULL,
+  `completion_image` varchar(255) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `tasks`
+--
+
+INSERT INTO `tasks` (`id`, `employee_id`, `site_id`, `attendance_id`, `title`, `description`, `task_image`, `start_time`, `end_time`, `latitude`, `longitude`, `status`, `created_at`, `updated_at`, `completed_at`, `completion_notes`, `completion_latitude`, `completion_longitude`, `completion_image`) VALUES
+(4, 3, 2, 7, 'namaste 🙏', 'namaste 🙏 👋', 'task_68a20331ad75d_1755448113.jpg', '2025-08-17 21:58:33', '2025-08-17 21:58:55', 21.52163010, 86.89994080, 'completed', '2025-08-17 16:28:33', '2025-08-17 16:28:55', '2025-08-17 16:28:55', '', 21.52162940, 86.89994160, 'task_68a203470dad0_1755448135.jpg'),
+(5, 3, 2, 7, 'kash  have', 'namaste', 'task_68a210ba089d8_1755451578.jpg', '2025-08-17 22:56:18', '2025-08-17 22:57:51', 21.52162960, 86.89994060, 'completed', '2025-08-17 17:26:18', '2025-08-17 17:27:51', '2025-08-17 17:27:51', '', 21.52162960, 86.89994310, 'task_68a211177b177_1755451671.jpg');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `users`
+--
+
+CREATE TABLE `users` (
+  `id` int(11) NOT NULL,
+  `username` varchar(50) NOT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  `password` varchar(255) NOT NULL,
+  `role` enum('superadmin','admin','supervisor','employee') NOT NULL,
+  `status` enum('active','inactive') DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `admin_role_id` int(11) DEFAULT NULL,
+  `created_by` int(11) DEFAULT NULL,
+  `is_admin` tinyint(1) DEFAULT 0,
+  `last_login` timestamp NULL DEFAULT NULL,
+  `account_locked` tinyint(1) DEFAULT 0,
+  `failed_login_attempts` int(11) DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `users`
+--
+
+INSERT INTO `users` (`id`, `username`, `email`, `password`, `role`, `status`, `created_at`, `updated_at`, `admin_role_id`, `created_by`, `is_admin`, `last_login`, `account_locked`, `failed_login_attempts`) VALUES
+(1, 'admin', 'admin@company.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'superadmin', 'active', '2025-08-07 20:16:30', '2025-09-19 05:02:06', 1, NULL, 1, NULL, 0, 0),
+(2, 'testadmin1758262691', NULL, '$2y$10$x4PgdzVWwe8Ol8ts5165pO.SdL.U7UasFEfc1XKYMt7..jCmvyyte', 'admin', 'active', '2025-09-19 06:31:37', '2025-09-19 06:31:37', 3, 1, 1, NULL, 0, 0),
+(3, 'testadmin', NULL, '$2y$10$JhzFEoyBQrVmd0B4iLaS2ukKJL8W1PS0CyrihdUmbmWnNTtX/rBY2', 'admin', 'active', '2025-09-19 06:51:21', '2025-09-19 06:51:21', 4, 1, 1, NULL, 0, 0);
+
+--
+-- Indexes for dumped tables
+--
+
+--
+-- Indexes for table `activity_logs`
+--
+ALTER TABLE `activity_logs`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_employee_created` (`employee_id`,`created_at`),
+  ADD KEY `idx_action` (`action`),
+  ADD KEY `idx_created_at` (`created_at`);
+
+--
+-- Indexes for table `admin_audit_log`
+--
+ALTER TABLE `admin_audit_log`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_audit_admin_user` (`admin_user_id`),
+  ADD KEY `idx_audit_action` (`action`),
+  ADD KEY `idx_audit_created_at` (`created_at`);
+
+--
+-- Indexes for table `admin_roles`
+--
+ALTER TABLE `admin_roles`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `role_name` (`role_name`);
+
+--
+-- Indexes for table `attendance`
+--
+ALTER TABLE `attendance`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `site_id` (`site_id`),
+  ADD KEY `approved_by` (`approved_by`),
+  ADD KEY `idx_employee_date_session` (`employee_id`,`date`,`session_number`),
+  ADD KEY `idx_employee_date_checkin` (`employee_id`,`date`),
+  ADD KEY `idx_employee_date_status` (`employee_id`,`date`);
+
+--
+-- Indexes for table `attendance_sessions`
+--
+ALTER TABLE `attendance_sessions`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_employee_date_session` (`employee_id`,`date`,`session_number`),
+  ADD KEY `site_id` (`site_id`),
+  ADD KEY `idx_employee_date` (`employee_id`,`date`),
+  ADD KEY `idx_status` (`status`),
+  ADD KEY `idx_approval` (`approved_by`,`approval_date`);
+
+--
+-- Indexes for table `departments`
+--
+ALTER TABLE `departments`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `employees`
+--
+ALTER TABLE `employees`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `employee_code` (`employee_code`),
+  ADD UNIQUE KEY `email` (`email`),
+  ADD KEY `department_id` (`department_id`),
+  ADD KEY `shift_id` (`shift_id`),
+  ADD KEY `site_id` (`site_id`),
+  ADD KEY `idx_employees_uan` (`uan_number`),
+  ADD KEY `idx_employees_esic` (`esic_number`),
+  ADD KEY `idx_employees_aadhar` (`aadhar_number`),
+  ADD KEY `idx_employees_pan` (`pan_number`),
+  ADD KEY `idx_employees_reporting_manager` (`reporting_manager_id`),
+  ADD KEY `idx_employees_contact` (`contact_number`);
+
+--
+-- Indexes for table `leave_requests`
+--
+ALTER TABLE `leave_requests`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `employee_id` (`employee_id`),
+  ADD KEY `l1_approved_by` (`l1_approved_by`),
+  ADD KEY `l2_approved_by` (`l2_approved_by`),
+  ADD KEY `rejected_by` (`rejected_by`),
+  ADD KEY `status` (`status`),
+  ADD KEY `start_date` (`start_date`);
+
+--
+-- Indexes for table `petty_cash_requests`
+--
+ALTER TABLE `petty_cash_requests`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `employee_id` (`employee_id`),
+  ADD KEY `approved_by` (`approved_by`);
+
+--
+-- Indexes for table `salaries`
+--
+ALTER TABLE `salaries`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_employee_month_year` (`employee_id`,`month`,`year`);
+
+--
+-- Indexes for table `shifts`
+--
+ALTER TABLE `shifts`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `sites`
+--
+ALTER TABLE `sites`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `tasks`
+--
+ALTER TABLE `tasks`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `site_id` (`site_id`),
+  ADD KEY `idx_employee_status` (`employee_id`,`status`),
+  ADD KEY `idx_attendance_id` (`attendance_id`),
+  ADD KEY `idx_created_date` (`created_at`);
+
+--
+-- Indexes for table `users`
+--
+ALTER TABLE `users`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `username` (`username`),
+  ADD UNIQUE KEY `email` (`email`),
+  ADD KEY `idx_users_role` (`role`),
+  ADD KEY `idx_users_admin_role_id` (`admin_role_id`),
+  ADD KEY `idx_users_is_admin` (`is_admin`),
+  ADD KEY `idx_users_status` (`status`),
+  ADD KEY `fk_users_created_by` (`created_by`);
+
+--
+-- AUTO_INCREMENT for dumped tables
+--
+
+--
+-- AUTO_INCREMENT for table `activity_logs`
+--
+ALTER TABLE `activity_logs`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+
+--
+-- AUTO_INCREMENT for table `admin_audit_log`
+--
+ALTER TABLE `admin_audit_log`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
+-- AUTO_INCREMENT for table `admin_roles`
+--
+ALTER TABLE `admin_roles`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+
+--
+-- AUTO_INCREMENT for table `attendance`
+--
+ALTER TABLE `attendance`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
+
+--
+-- AUTO_INCREMENT for table `attendance_sessions`
+--
+ALTER TABLE `attendance_sessions`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `departments`
+--
+ALTER TABLE `departments`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+
+--
+-- AUTO_INCREMENT for table `employees`
+--
+ALTER TABLE `employees`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+
+--
+-- AUTO_INCREMENT for table `leave_requests`
+--
+ALTER TABLE `leave_requests`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+
+--
+-- AUTO_INCREMENT for table `petty_cash_requests`
+--
+ALTER TABLE `petty_cash_requests`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+
+--
+-- AUTO_INCREMENT for table `users`
+--
+ALTER TABLE `users`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+
+--
+-- Constraints for dumped tables
+--
+
+--
+-- Constraints for table `admin_audit_log`
+--
+ALTER TABLE `admin_audit_log`
+  ADD CONSTRAINT `admin_audit_log_ibfk_1` FOREIGN KEY (`admin_user_id`) REFERENCES `users` (`id`);
+
+--
+-- Constraints for table `users`
+--
+ALTER TABLE `users`
+  ADD CONSTRAINT `fk_users_admin_role` FOREIGN KEY (`admin_role_id`) REFERENCES `admin_roles` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_users_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`);
+COMMIT;
+
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;

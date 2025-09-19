@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tasks API Debug Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            border-color: #bee5eb;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 3px;
+            overflow-x: auto;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .debug-info {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        hr {
+            border: none;
+            height: 2px;
+            background: #eee;
+            margin: 20px 0;
+        }
+        .status-success { color: #28a745; font-weight: bold; }
+        .status-error { color: #dc3545; font-weight: bold; }
+        .status-warning { color: #ffc107; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Tasks API Debug Tool</h1>
+<div class='section info'><h2>1. Database Connection</h2><span class='status-success'>✅ Database connection successful</span><br></div><div class='section info'><h2>2. Available Users</h2><table><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th></tr><tr><td>1</td><td>admin</td><td>admin@company.com</td><td>superadmin</td></tr><tr><td>3</td><td>testadmin</td><td></td><td>admin</td></tr><tr><td>4</td><td>rabi</td><td>rabi@gmail.com</td><td>admin</td></tr><tr><td>5</td><td>rahul_002</td><td>rahul@gmail.com</td><td>employee</td></tr><tr><td>6</td><td>raj_003</td><td>raj@gmail.com</td><td>employee</td></tr><tr><td>7</td><td>rah_005</td><td>rah@gmail.com</td><td>employee</td></tr></table></div><div class='section info'><h2>3. Available Employees</h2><table><tr><th>ID</th><th>Code</th><th>Name</th><th>Email</th></tr><tr><td>1</td><td>001</td><td>Rabi Ranjan</td><td>rabi@gmail.com</td></tr><tr><td>2</td><td>002</td><td>Rahul</td><td>rahul@gmail.com</td></tr><tr><td>3</td><td>003</td><td>Raj Dev</td><td>raj@gmail.com</td></tr><tr><td>4</td><td>005</td><td>Rahul Check</td><td>rah@gmail.com</td></tr></table></div><div class='section info'><h2>4. All Tasks</h2><table><tr><th>ID</th><th>Title</th><th>Employee</th><th>Admin Created</th><th>Assigned By</th><th>Status</th><th>Created</th></tr><tr><td>9</td><td>adsdafa</td><td> (ID: )</td><td>Yes</td><td>1</td><td>active</td><td>2025-09-19 21:13:52</td></tr><tr><td>8</td><td>new task for rahul</td><td> (ID: )</td><td>Yes</td><td>1</td><td>active</td><td>2025-09-19 21:08:58</td></tr><tr><td>7</td><td>new task for rahul</td><td> (ID: )</td><td>Yes</td><td>1</td><td>active</td><td>2025-09-19 20:57:19</td></tr><tr><td>6</td><td>server task</td><td> (ID: )</td><td>Yes</td><td>1</td><td>active</td><td>2025-09-19 14:17:23</td></tr><tr><td>5</td><td>kash  have</td><td>Raj Dev (ID: 3)</td><td>No</td><td></td><td>completed</td><td>2025-08-17 22:56:18</td></tr><tr><td>4</td><td>namaste 🙏</td><td>Raj Dev (ID: 3)</td><td>No</td><td></td><td>completed</td><td>2025-08-17 21:58:33</td></tr></table></div><div class='section info'><h2>5. Task Assignments</h2><table><tr><th>ID</th><th>Task</th><th>Assigned To</th><th>Assigned By</th><th>Status</th><th>Created</th></tr><tr><td>5</td><td>adsdafa (ID: 9)</td><td>rahul_002 (ID: 5)</td><td>admin (ID: 1)</td><td>pending</td><td>2025-09-19 21:13:52</td></tr><tr><td>6</td><td>adsdafa (ID: 9)</td><td>rah_005 (ID: 7)</td><td>admin (ID: 1)</td><td>pending</td><td>2025-09-19 21:13:52</td></tr><tr><td>7</td><td>adsdafa (ID: 9)</td><td>raj_003 (ID: 6)</td><td>admin (ID: 1)</td><td>pending</td><td>2025-09-19 21:13:52</td></tr><tr><td>4</td><td>new task for rahul (ID: 8)</td><td>rahul_002 (ID: 5)</td><td>admin (ID: 1)</td><td>pending</td><td>2025-09-19 21:08:58</td></tr><tr><td>3</td><td>new task for rahul (ID: 7)</td><td>rahul_002 (ID: 5)</td><td>admin (ID: 1)</td><td>pending</td><td>2025-09-19 20:57:19</td></tr><tr><td>1</td><td>server task (ID: 6)</td><td>rabi (ID: 4)</td><td>admin (ID: 1)</td><td>pending</td><td>2025-09-19 14:17:23</td></tr><tr><td>2</td><td>server task (ID: 6)</td><td>testadmin (ID: 3)</td><td>admin (ID: 1)</td><td>pending</td><td>2025-09-19 14:17:23</td></tr></table></div><div class='section info'><h2>6. Test API for Each Employee User</h2><h3>Testing for user: rahul_002 (ID: 5)</h3>✅ Employee found: Rahul (Employee ID: 2)<br>📊 Query returned 3 tasks<br><table><tr><th>ID</th><th>Title</th><th>Type</th><th>Status</th><th>Site</th></tr><tr><td>9</td><td>adsdafa</td><td>assigned</td><td>active</td><td>Site A</td></tr><tr><td>8</td><td>new task for rahul</td><td>assigned</td><td>active</td><td>Meinn Office</td></tr><tr><td>7</td><td>new task for rahul</td><td>assigned</td><td>active</td><td>Meinn Office</td></tr></table><hr><h3>Testing for user: raj_003 (ID: 6)</h3>✅ Employee found: Raj Dev (Employee ID: 3)<br>📊 Query returned 1 tasks<br><table><tr><th>ID</th><th>Title</th><th>Type</th><th>Status</th><th>Site</th></tr><tr><td>9</td><td>adsdafa</td><td>assigned</td><td>active</td><td>Site A</td></tr></table><hr><h3>Testing for user: rah_005 (ID: 7)</h3>✅ Employee found: Rahul Check (Employee ID: 4)<br>📊 Query returned 1 tasks<br><table><tr><th>ID</th><th>Title</th><th>Type</th><th>Status</th><th>Site</th></tr><tr><td>9</td><td>adsdafa</td><td>assigned</td><td>active</td><td>Site A</td></tr></table><hr></div><div class='section info'><h2>7. Quick Actions</h2><p>If you want to create a test task assignment:</p><ol><li>Go to the admin panel: <a href='pages/tasks/assign.php' target='_blank'>Task Assignment</a></li><li>Create a new task and assign it to one of the employee users</li><li>Refresh this debug page to see the results</li></ol></div>    </div>
+</body>
+</html>

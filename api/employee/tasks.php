@@ -32,22 +32,22 @@ switch ($method) {
 function getTasks($pdo, $employee) {
     $date = $_GET['date'] ?? date('Y-m-d');
     $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : null;
-
+    
     try {
         // Get attendance status
         $attendance_stmt = $pdo->prepare("
-            SELECT * FROM attendance
-            WHERE employee_id = ? AND date = ?
+            SELECT * FROM attendance 
+            WHERE employee_id = ? AND date = ? 
             AND check_in_latitude IS NOT NULL
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC 
             LIMIT 1
         ");
         $attendance_stmt->execute([$employee['id'], $date]);
         $attendance = $attendance_stmt->fetch();
-
+        
         $attendance_status = 'not_checked_in';
         $can_create_task = false;
-
+        
         if ($attendance) {
             if ($attendance['check_out_latitude'] !== null) {
                 $attendance_status = 'checked_out';
@@ -56,124 +56,283 @@ function getTasks($pdo, $employee) {
                 $can_create_task = true;
             }
         }
-
-        // Get field tasks (original mobile app tasks) for the date
-        $field_tasks_query = "
-            SELECT t.*, s.name as site_name, 'field' as task_source,
-                   CASE
-                       WHEN t.latitude IS NOT NULL AND t.longitude IS NOT NULL THEN
-                           CONCAT('Lat: ', ROUND(t.latitude, 6), ', Lng: ', ROUND(t.longitude, 6))
-                       ELSE 'Location not available'
-                   END as location_display,
-                   CASE
-                       WHEN t.completion_latitude IS NOT NULL AND t.completion_longitude IS NOT NULL THEN
-                           CONCAT('Lat: ', ROUND(t.completion_latitude, 6), ', Lng: ', ROUND(t.completion_longitude, 6))
-                       ELSE NULL
-                   END as completion_location_display,
-                   DATE_FORMAT(t.created_at, '%H:%i') as created_time_display,
-                   DATE_FORMAT(t.completed_at, '%H:%i') as completed_time_display
+        
+        // UPDATED: Get both self-created tasks AND admin-assigned tasks
+        $tasks_query = "
+            SELECT 
+                t.id,
+                t.employee_id,
+                t.attendance_id,
+                t.site_id,
+                t.title,
+                t.description,
+                t.task_image,
+                t.latitude,
+                t.longitude,
+                t.status,
+                t.created_at,
+                t.completed_at,
+                t.completion_notes,
+                t.completion_latitude,
+                t.completion_longitude,
+                t.completion_image,
+                t.admin_created,
+                t.assigned_by,
+                t.priority,
+                t.due_date,
+                s.name as site_name,
+                u.username as assigned_by_name,
+                CASE 
+                    WHEN t.latitude IS NOT NULL AND t.longitude IS NOT NULL THEN 
+                        CONCAT('Lat: ', ROUND(t.latitude, 6), ', Lng: ', ROUND(t.longitude, 6))
+                    ELSE 'Location not available' 
+                END as location_display,
+                CASE 
+                    WHEN t.completion_latitude IS NOT NULL AND t.completion_longitude IS NOT NULL THEN 
+                        CONCAT('Lat: ', ROUND(t.completion_latitude, 6), ', Lng: ', ROUND(t.completion_longitude, 6))
+                    ELSE NULL 
+                END as completion_location_display,
+                DATE_FORMAT(t.created_at, '%H:%i') as created_time_display,
+                DATE_FORMAT(t.completed_at, '%H:%i') as completed_time_display,
+                ta.id as assignment_id,
+                ta.status as assignment_status,
+                ta.notes as assignment_notes,
+                ta.started_at as assignment_started_at,
+                ta.completed_at as assignment_completed_at,
+                CASE 
+                    WHEN t.admin_created = 1 THEN 'assigned'
+                    ELSE 'self_created'
+                END as task_type
             FROM tasks t
             JOIN sites s ON t.site_id = s.id
-            WHERE t.employee_id = ? AND DATE(t.created_at) = ?
-            ORDER BY t.created_at DESC
-        ";
-
-        if ($limit) {
-            $field_tasks_query .= " LIMIT " . $limit;
-        }
-
-        $field_tasks_stmt = $pdo->prepare($field_tasks_query);
-        $field_tasks_stmt->execute([$employee['id'], $date]);
-        $field_tasks = $field_tasks_stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // Get admin-assigned tasks for this user
-        $admin_tasks_query = "
-            SELECT t.id, t.title, t.description, t.priority, t.due_date, t.created_at,
-                   ta.status, ta.notes, ta.started_at, ta.completed_at, ta.id as assignment_id,
-                   'admin' as task_source,
-                   u.username as created_by_username,
-                   s.name as site_name,
-                   DATE_FORMAT(t.created_at, '%H:%i') as created_time_display,
-                   DATE_FORMAT(ta.completed_at, '%H:%i') as completed_time_display
-            FROM task_assignments ta
-            JOIN tasks t ON ta.task_id = t.id
             LEFT JOIN users u ON t.assigned_by = u.id
-            LEFT JOIN sites s ON t.site_id = s.id
-            WHERE ta.assigned_to = ? AND t.admin_created = 1
+            LEFT JOIN task_assignments ta ON t.id = ta.task_id AND ta.assigned_to = ?
+            WHERE (
+                -- Self-created tasks
+                (t.employee_id = ? AND DATE(t.created_at) = ?) OR
+                -- Admin-assigned tasks (show all assigned tasks, not just today's)
+                (t.admin_created = 1 AND ta.assigned_to = ?)
+            )
             ORDER BY t.created_at DESC
         ";
-
+        
         if ($limit) {
-            $admin_tasks_query .= " LIMIT " . $limit;
+            $tasks_query .= " LIMIT " . $limit;
         }
-
-        $admin_tasks_stmt = $pdo->prepare($admin_tasks_query);
-        $admin_tasks_stmt->execute([$employee['id']]);
-        $admin_tasks = $admin_tasks_stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // Combine all tasks
-        $all_tasks = array_merge($field_tasks, $admin_tasks);
-
-        // Sort by created_at descending
-        usort($all_tasks, function($a, $b) {
-            return strtotime($b['created_at']) - strtotime($a['created_at']);
-        });
-
-        // Get task summary (field tasks only for mobile app logic)
+        
+        $tasks_stmt = $pdo->prepare($tasks_query);
+        $tasks_stmt->execute([
+            $employee['id'], // for task_assignments join
+            $employee['id'], // for self-created tasks
+            $date,          // for self-created tasks date
+            $employee['id']  // for admin-assigned tasks
+        ]);
+        $tasks = $tasks_stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // UPDATED: Get combined task summary
         $summary_stmt = $pdo->prepare("
-            SELECT
+            SELECT 
                 COUNT(*) as total_tasks,
-                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_tasks,
-                SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_tasks,
-                SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_tasks
-            FROM tasks
-            WHERE employee_id = ? AND DATE(created_at) = ?
+                SUM(CASE 
+                    WHEN (t.status = 'completed' OR ta.status = 'completed') THEN 1 
+                    ELSE 0 
+                END) as completed_tasks,
+                SUM(CASE 
+                    WHEN (t.status = 'active' AND (ta.status IS NULL OR ta.status IN ('pending', 'in_progress'))) THEN 1 
+                    ELSE 0 
+                END) as active_tasks,
+                SUM(CASE 
+                    WHEN (t.status = 'cancelled' OR ta.status = 'cancelled') THEN 1 
+                    ELSE 0 
+                END) as cancelled_tasks,
+                SUM(CASE 
+                    WHEN t.admin_created = 1 THEN 1 
+                    ELSE 0 
+                END) as assigned_tasks,
+                SUM(CASE 
+                    WHEN t.admin_created = 0 THEN 1 
+                    ELSE 0 
+                END) as self_created_tasks
+            FROM tasks t
+            LEFT JOIN task_assignments ta ON t.id = ta.task_id AND ta.assigned_to = ?
+            WHERE (
+                (t.employee_id = ? AND DATE(t.created_at) = ?) OR
+                (t.admin_created = 1 AND ta.assigned_to = ?)
+            )
         ");
-        $summary_stmt->execute([$employee['id'], $date]);
+        $summary_stmt->execute([
+            $employee['id'], // for task_assignments join
+            $employee['id'], // for self-created tasks
+            $date,          // for self-created tasks date
+            $employee['id']  // for admin-assigned tasks
+        ]);
         $summary = $summary_stmt->fetch(PDO::FETCH_ASSOC);
-
-        // Get admin task summary
-        $admin_summary_stmt = $pdo->prepare("
-            SELECT
-                COUNT(*) as total_admin_tasks,
-                SUM(CASE WHEN ta.status = 'completed' THEN 1 ELSE 0 END) as completed_admin_tasks,
-                SUM(CASE WHEN ta.status = 'pending' THEN 1 ELSE 0 END) as pending_admin_tasks,
-                SUM(CASE WHEN ta.status = 'in_progress' THEN 1 ELSE 0 END) as active_admin_tasks
-            FROM task_assignments ta
-            WHERE ta.assigned_to = ?
-        ");
-        $admin_summary_stmt->execute([$employee['id']]);
-        $admin_summary = $admin_summary_stmt->fetch(PDO::FETCH_ASSOC);
-
-        // Check if there's already an active field task
-        $active_task_exists = false;
-        foreach ($field_tasks as $task) {
-            if ($task['status'] === 'active') {
-                $active_task_exists = true;
+        
+        // Check if there's already an active self-created task
+        $active_self_task_exists = false;
+        foreach ($tasks as $task) {
+            if ($task['task_type'] === 'self_created' && $task['status'] === 'active') {
+                $active_self_task_exists = true;
                 break;
             }
         }
-
-        // Can't create task if there's already an active one
-        if ($active_task_exists) {
+        
+        // Can't create task if there's already an active self-created one
+        if ($active_self_task_exists) {
             $can_create_task = false;
         }
-
+        
         $response = [
-            'tasks' => $all_tasks,
-            'field_tasks' => $field_tasks,
-            'admin_tasks' => $admin_tasks,
-            'summary' => array_merge($summary, $admin_summary),
+            'tasks' => $tasks,
+            'summary' => $summary,
             'can_create_task' => $can_create_task,
             'attendance_status' => $attendance_status
         ];
-
+        
         sendSuccess('Tasks retrieved successfully', $response);
-
+        
     } catch (PDOException $e) {
         error_log("Get tasks error: " . $e->getMessage());
         sendError('Database error occurred', 500);
     }
+}
+
+// Add this function to api/employee/tasks.php
+function updateAssignmentStatus($pdo, $employee) {
+    try {
+        $input = json_decode(file_get_contents('php://input'), true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            sendError('Invalid JSON data', 400);
+            return;
+        }
+        
+        $assignment_id = (int)($input['assignment_id'] ?? 0);
+        $status = trim($input['status'] ?? '');
+        $notes = trim($input['notes'] ?? '');
+        $latitude = isset($input['latitude']) ? (float)$input['latitude'] : null;
+        $longitude = isset($input['longitude']) ? (float)$input['longitude'] : null;
+        
+        // Validate required fields
+        if (!$assignment_id || !$status) {
+            sendError('Assignment ID and status are required', 400);
+            return;
+        }
+        
+        // Validate status values
+        $valid_statuses = ['pending', 'in_progress', 'completed', 'cancelled'];
+        if (!in_array($status, $valid_statuses)) {
+            sendError('Invalid status. Must be one of: ' . implode(', ', $valid_statuses), 400);
+            return;
+        }
+        
+        // Verify assignment exists and belongs to employee
+        $stmt = $pdo->prepare("
+            SELECT ta.*, t.title, t.status as task_status 
+            FROM task_assignments ta
+            JOIN tasks t ON ta.task_id = t.id
+            WHERE ta.id = ? AND ta.assigned_to = ?
+        ");
+        $stmt->execute([$assignment_id, $employee['id']]);
+        $assignment = $stmt->fetch();
+        
+        if (!$assignment) {
+            sendError('Assignment not found or not assigned to you', 404);
+            return;
+        }
+        
+        // Prepare update fields based on status
+        $update_fields = [];
+        $update_values = [];
+        
+        $update_fields[] = "status = ?";
+        $update_values[] = $status;
+        
+        $update_fields[] = "notes = ?";
+        $update_values[] = $notes;
+        
+        $update_fields[] = "updated_at = NOW()";
+        
+        // Set timestamps based on status
+        if ($status === 'in_progress' && $assignment['started_at'] === null) {
+            $update_fields[] = "started_at = NOW()";
+        }
+        
+        if ($status === 'completed') {
+            $update_fields[] = "completed_at = NOW()";
+            // Also update the main task status to completed
+            $update_task_stmt = $pdo->prepare("
+                UPDATE tasks SET 
+                    status = 'completed',
+                    completed_at = NOW(),
+                    completion_notes = ?,
+                    completion_latitude = ?,
+                    completion_longitude = ?
+                WHERE id = ?
+            ");
+            $update_task_stmt->execute([
+                $notes,
+                $latitude,
+                $longitude,
+                $assignment['task_id']
+            ]);
+        }
+        
+        // Update the assignment
+        $update_values[] = $assignment_id;
+        $update_values[] = $employee['id'];
+        
+        $update_sql = "
+            UPDATE task_assignments SET " . implode(', ', $update_fields) . "
+            WHERE id = ? AND assigned_to = ?
+        ";
+        
+        $stmt = $pdo->prepare($update_sql);
+        $stmt->execute($update_values);
+        
+        // Get updated assignment data
+        $stmt = $pdo->prepare("
+            SELECT ta.*, t.title, t.status as task_status, s.name as site_name,
+                   u.username as assigned_by_name
+            FROM task_assignments ta
+            JOIN tasks t ON ta.task_id = t.id
+            JOIN sites s ON t.site_id = s.id
+            LEFT JOIN users u ON t.assigned_by = u.id
+            WHERE ta.id = ?
+        ");
+        $stmt->execute([$assignment_id]);
+        $updated_assignment = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        error_log("Assignment status updated - ID: $assignment_id, Status: $status, Employee: {$employee['id']}");
+        
+        sendSuccess('Assignment status updated successfully', $updated_assignment);
+        
+    } catch (PDOException $e) {
+        error_log("Database error in updateAssignmentStatus: " . $e->getMessage());
+        sendError('Database error occurred', 500);
+    } catch (Exception $e) {
+        error_log("General error in updateAssignmentStatus: " . $e->getMessage());
+        sendError('An error occurred: ' . $e->getMessage(), 500);
+    }
+}
+
+// Update the main switch statement to handle PATCH requests
+// Replace the existing switch statement with:
+switch ($method) {
+    case 'GET':
+        getTasks($pdo, $employee);
+        break;
+    case 'POST':
+        createTask($pdo, $employee);
+        break;
+    case 'PUT':
+        completeTask($pdo, $employee);
+        break;
+    case 'PATCH':
+        updateAssignmentStatus($pdo, $employee);
+        break;
+    default:
+        sendError('Method not allowed', 405);
 }
 
 function createTask($pdo, $employee) {

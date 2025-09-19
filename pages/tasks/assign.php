@@ -75,13 +75,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Get all active users for assignment
+// First, create user accounts for employees who don't have them
+$create_users_stmt = $pdo->prepare("
+    INSERT IGNORE INTO users (username, email, password, role, status, created_at)
+    SELECT
+        CONCAT(SUBSTRING_INDEX(e.email, '@', 1), '_', e.employee_code) as username,
+        e.email,
+        ? as password,
+        'employee' as role,
+        'active' as status,
+        NOW() as created_at
+    FROM employees e
+    WHERE e.status = 'active'
+    AND e.email IS NOT NULL
+    AND e.email NOT IN (SELECT COALESCE(u.email, '') FROM users u WHERE u.email IS NOT NULL)
+");
+$default_password = password_hash('employee123', PASSWORD_DEFAULT);
+$create_users_stmt->execute([$default_password]);
+
+// Now get all active users for assignment (including newly created employee accounts)
 $stmt = $pdo->prepare("
     SELECT u.id, u.username, u.role,
            COALESCE(e.name, u.username) as display_name,
            COALESCE(e.employee_code, 'N/A') as employee_code
     FROM users u
-    LEFT JOIN employees e ON u.username = e.email OR u.id = e.id
+    LEFT JOIN employees e ON u.email = e.email
     WHERE u.status = 'active'
     ORDER BY u.role, display_name
 ");
