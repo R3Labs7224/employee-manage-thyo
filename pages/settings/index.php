@@ -79,7 +79,7 @@ try {
         .overview-card i {
             font-size: 2.5rem;
             margin-bottom: 1rem;
-            color: var(--primary);
+            color: var(--orange-600);
         }
 
         .overview-card h4 {
@@ -90,7 +90,7 @@ try {
         .overview-card .count {
             font-size: 2rem;
             font-weight: 700;
-            color: var(--primary);
+            color: var(--orange-600);
             margin-bottom: 0.5rem;
         }
 
@@ -125,7 +125,7 @@ try {
         .settings-icon {
             width: 60px;
             height: 60px;
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            background: linear-gradient(135deg, var(--orange-400), var(--orange-600));
             border-radius: 12px;
             display: flex;
             align-items: center;
@@ -172,7 +172,7 @@ try {
 
         .stat-value {
             font-weight: 700;
-            color: var(--primary);
+            color: var(--orange-600);
         }
 
         .settings-actions {
@@ -185,7 +185,7 @@ try {
             align-items: center;
             gap: 0.5rem;
             padding: 0.75rem 1.5rem;
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            background: linear-gradient(135deg, var(--orange-400), var(--orange-600));
             color: white;
             text-decoration: none;
             border-radius: 8px;
@@ -194,13 +194,13 @@ try {
         }
 
         .settings-btn:hover {
-            background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+            background: linear-gradient(135deg, var(--orange-600), var(--orange-400));
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+            box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3);
         }
 
         .quick-setup {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--orange-400) 0%, var(--orange-600) 100%);
             color: white;
             padding: 2rem;
             border-radius: 12px;
@@ -364,7 +364,7 @@ try {
                     <!-- Sites Management -->
                     <div class="settings-card">
                         <div class="settings-card-header">
-                            <div class="settings-icon" style="background: linear-gradient(135deg, #059669, #047857);">
+                            <div class="settings-icon" style="background: linear-gradient(135deg, var(--orange-400), var(--orange-600));">
                                 <i class="fas fa-map-marker-alt"></i>
                             </div>
                             <h3>Work Sites Management</h3>
@@ -396,7 +396,7 @@ try {
                     <!-- Shifts Management -->
                     <div class="settings-card">
                         <div class="settings-card-header">
-                            <div class="settings-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+                            <div class="settings-icon" style="background: linear-gradient(135deg, var(--orange-400), var(--orange-600));">
                                 <i class="fas fa-clock"></i>
                             </div>
                             <h3>Work Shifts Management</h3>
@@ -431,7 +431,7 @@ try {
                     <h3 style="margin-bottom: 1.5rem; color: var(--gray-900);">Quick Actions</h3>
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
                         
-                        <a href="departments.php" class="btn btn-primary" style="padding: 1.5rem; text-decoration: none; background: linear-gradient(135deg, #4f46e5, #3730a3); display: flex; align-items: center;">
+                        <a href="departments.php" class="btn btn-primary" style="padding: 1.5rem; text-decoration: none; background: linear-gradient(135deg, var(--orange-400), var(--orange-600)); display: flex; align-items: center;">
                             <i class="fas fa-building"></i>
                             <div style="margin-left: 1rem; text-align: left;">
                                 <div style="font-weight: 700; font-size: 1.1rem;">Create Department</div>
@@ -439,7 +439,7 @@ try {
                             </div>
                         </a>
                         
-                        <a href="sites.php" class="btn btn-primary" style="padding: 1.5rem; text-decoration: none; background: linear-gradient(135deg, #059669, #047857); display: flex; align-items: center;">
+                        <a href="sites.php" class="btn btn-primary" style="padding: 1.5rem; text-decoration: none; background: linear-gradient(135deg, var(--orange-400), var(--orange-600)); display: flex; align-items: center;">
                             <i class="fas fa-map-marker-alt"></i>
                             <div style="margin-left: 1rem; text-align: left;">
                                 <div style="font-weight: 700; font-size: 1.1rem;">Create Work Site</div>
@@ -447,7 +447,7 @@ try {
                             </div>
                         </a>
                         
-                        <a href="shifts.php" class="btn btn-primary" style="padding: 1.5rem; text-decoration: none; background: linear-gradient(135deg, #f59e0b, #d97706); display: flex; align-items: center;">
+                        <a href="shifts.php" class="btn btn-primary" style="padding: 1.5rem; text-decoration: none; background: linear-gradient(135deg, var(--orange-400), var(--orange-600)); display: flex; align-items: center;">
                             <i class="fas fa-clock"></i>
                             <div style="margin-left: 1rem; text-align: left;">
                                 <div style="font-weight: 700; font-size: 1.1rem;">Create Shift</div>

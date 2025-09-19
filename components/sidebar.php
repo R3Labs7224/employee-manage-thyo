@@ -62,8 +62,9 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                 </h4>
             </li>
             
+            <?php if (hasAdminPermission('employees.view')): ?>
             <li class="menu-item">
-                <a href="<?php echo $basePath; ?>pages/employees/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/employees/') !== false) ? 'active' : ''; ?>" data-tooltip="Manage Employees">
+                <a href="<?php echo $basePath; ?>pages/employees/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/employees/') !== false) ? 'active' : ''; ?>" data-tooltip="Employees">
                     <div class="menu-icon-wrapper">
                         <i class="fas fa-users menu-icon"></i>
                     </div>
@@ -74,7 +75,9 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                     <div class="menu-indicator"></div>
                 </a>
             </li>
+            <?php endif; ?>
 
+            <?php if (hasAdminPermission('attendance.view')): ?>
             <li class="menu-item">
                 <a href="<?php echo $basePath; ?>pages/attendance/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/attendance/') !== false) ? 'active' : ''; ?>" data-tooltip="Attendance Management">
                     <div class="menu-icon-wrapper">
@@ -84,6 +87,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                     <div class="menu-indicator"></div>
                 </a>
             </li>
+            <?php endif; ?>
 
             <!-- Financial Section -->
             <li class="menu-section">
@@ -93,6 +97,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                 </h4>
             </li>
 
+            <?php if (hasAdminPermission('petty_cash.view')): ?>
             <li class="menu-item">
                 <a href="<?php echo $basePath; ?>pages/petty_cash/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/petty_cash/') !== false) ? 'active' : ''; ?>" data-tooltip="Petty Cash Requests">
                     <div class="menu-icon-wrapper">
@@ -105,7 +110,9 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                     <div class="menu-indicator"></div>
                 </a>
             </li>
+            <?php endif; ?>
 
+            <?php if (hasAdminPermission('salary.view')): ?>
             <li class="menu-item">
                 <a href="<?php echo $basePath; ?>pages/salary/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/salary/') !== false) ? 'active' : ''; ?>" data-tooltip="Salary Management">
                     <div class="menu-icon-wrapper">
@@ -115,6 +122,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                     <div class="menu-indicator"></div>
                 </a>
             </li>
+            <?php endif; ?>
 
             <!-- Operations Section -->
             <li class="menu-section">
@@ -124,6 +132,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                 </h4>
             </li>
 
+            <?php if (hasAdminPermission('tasks.view')): ?>
             <li class="menu-item">
                 <a href="<?php echo $basePath; ?>pages/tasks/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/tasks/') !== false) ? 'active' : ''; ?>" data-tooltip="Task Management">
                     <div class="menu-icon-wrapper">
@@ -133,7 +142,9 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                     <div class="menu-indicator"></div>
                 </a>
             </li>
+            <?php endif; ?>
 
+            <?php if (hasAdminPermission('reports.view')): ?>
             <li class="menu-item">
                 <a href="<?php echo $basePath; ?>pages/reports/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/reports/') !== false) ? 'active' : ''; ?>" data-tooltip="Reports & Analytics">
                     <div class="menu-icon-wrapper">
@@ -143,6 +154,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                     <div class="menu-indicator"></div>
                 </a>
             </li>
+            <?php endif; ?>
             <li class="menu-section">
                 <div class="section-title">
                     <i class="fas fa-calendar-alt"></i>
@@ -150,9 +162,10 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                 </div>
             </li>
 
+            <?php if (hasAdminPermission('leave.view')): ?>
             <li class="menu-item">
-                <a href="<?php echo $basePath; ?>pages/leave/index.php" class="menu-link <?php 
-                    echo (strpos($_SERVER['REQUEST_URI'], '/leave/') !== false) ? 
+                <a href="<?php echo $basePath; ?>pages/leave/index.php" class="menu-link <?php
+                    echo (strpos($_SERVER['REQUEST_URI'], '/leave/') !== false) ?
                     'active' : ''; ?>" data-tooltip="Leave Requests">
                     <div class="menu-icon-wrapper">
                         <i class="fas fa-calendar-check menu-icon"></i>
@@ -161,7 +174,28 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                     <div class="menu-indicator"></div>
                 </a>
             </li>
+            <?php endif; ?>
 
+
+            <!-- Admin Section (Only for Superadmin) -->
+            <?php if (isSuperAdmin()): ?>
+            <li class="menu-section">
+                <h4 class="section-title">
+                    <i class="fas fa-user-shield"></i>
+                    <span>Administration</span>
+                </h4>
+            </li>
+
+            <li class="menu-item">
+                <a href="<?php echo $basePath; ?>pages/admin/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/admin/') !== false) ? 'active' : ''; ?>" data-tooltip="Admin Management">
+                    <div class="menu-icon-wrapper">
+                        <i class="fas fa-user-cog menu-icon"></i>
+                    </div>
+                    <span class="menu-text">Admin</span>
+                    <div class="menu-indicator"></div>
+                </a>
+            </li>
+            <?php endif; ?>
 
             <!-- Settings Section -->
             <li class="menu-section">
@@ -171,6 +205,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                 </h4>
             </li>
 
+            <?php if (hasAdminPermission('settings.view')): ?>
             <li class="menu-item">
                 <a href="<?php echo $basePath; ?>pages/settings" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/settings/') !== false) ? 'active' : ''; ?>" data-tooltip="System Settings">
                     <div class="menu-icon-wrapper">
@@ -180,6 +215,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                     <div class="menu-indicator"></div>
                 </a>
             </li>
+            <?php endif; ?>
         </ul>
     </nav>
 
@@ -211,7 +247,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                 <i class="fas fa-question-circle"></i>
             </button>
             <button class="quick-action-btn" data-tooltip="Toggle Sidebar" onclick="toggleSidebar()">
-                <i class="fas fa-chevron-left"></i>
+                <i class="fas fa-chevron-left" id="sidebarQuickToggle"></i>
             </button>
         </div>
     </div>
@@ -224,22 +260,29 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
 <style>
     .sidebar {
         width: 280px;
-        background: linear-gradient(180deg, var(--gray-900) 0%, var(--gray-800) 100%);
-        color: var(--white);
+        background: linear-gradient(180deg, var(--orange-600) 0%, var(--orange-400) 100%);
+        color: white;
         position: fixed;
         height: 100vh;
         overflow-y: auto;
         overflow-x: hidden;
         box-shadow: var(--shadow-xl);
         z-index: 100;
-        transition: transform var(--transition-normal);
-        border-right: 1px solid rgba(255, 255, 255, 0.1);
+        transition: all var(--transition-normal);
+        border-right: 1px solid rgba(251, 146, 60, 0.4);
     }
+    
+    .sidebar.collapsed {
+        transform: translateX(-100%);
+        width: 280px;
+    }
+    
     
     .sidebar-header {
         padding: 2rem 1.5rem;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        background: linear-gradient(135deg, var(--primary-indigo), var(--primary-indigo-dark));
+        border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
         position: relative;
         overflow: hidden;
     }
@@ -273,7 +316,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
         align-items: center;
         justify-content: center;
         font-size: 1.5rem;
-        color: var(--accent-amber);
+        color: var(--accent-white);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         animation: float 3s ease-in-out infinite;
         padding: 5px;
@@ -289,13 +332,14 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
     .logo-main {
         font-size: 1.5rem;
         font-weight: 800;
-        color: var(--white);
+        color: white;
+        text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
     }
     
     .logo-sub {
         font-size: 0.75rem;
         font-weight: 400;
-        color: var(--accent-amber);
+        color: var(--accent-white);
         letter-spacing: 0.1em;
     }
     
@@ -306,7 +350,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
     }
     
     .version-badge {
-        background: var(--accent-amber);
+        background: var(--accent-white);
         color: var(--gray-900);
         padding: 0.25rem 0.5rem;
         border-radius: var(--radius);
@@ -333,7 +377,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
         padding: 0.5rem 1.5rem;
         font-size: 0.75rem;
         font-weight: 600;
-        color: var(--gray-400);
+        color: rgba(255, 255, 255, 0.8);
         text-transform: uppercase;
         letter-spacing: 0.1em;
         display: flex;
@@ -356,7 +400,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
         display: flex;
         align-items: center;
         padding: 1rem 1.5rem;
-        color: var(--gray-300);
+        color: white;
         text-decoration: none;
         transition: all var(--transition-normal);
         border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
@@ -373,7 +417,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
         left: -100%;
         width: 100%;
         height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.1), transparent);
+        background: linear-gradient(90deg, transparent, rgba(251, 146, 60, 0.2), transparent);
         transition: left 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     }
     
@@ -383,16 +427,20 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
     
     .menu-link:hover,
     .menu-link.active {
-        background: rgba(79, 70, 229, 0.1);
-        color: var(--white);
+        background: rgba(255, 255, 255, 0.3);
+        color: white;
+        font-weight: bold;
         transform: translateX(8px);
-        border-left-color: var(--accent-amber);
+        border-left-color: white;
+        backdrop-filter: blur(10px);
     }
     
     .menu-link.active {
-        background: linear-gradient(135deg, rgba(79, 70, 229, 0.2), rgba(245, 158, 11, 0.1));
-        color: var(--accent-amber);
-        border-left-color: var(--accent-amber);
+        background: rgba(255, 255, 255, 0.4);
+        color: white;
+        font-weight: bold;
+        border-left-color: white;
+        backdrop-filter: blur(10px);
     }
     
     .menu-icon-wrapper {
@@ -410,7 +458,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
     
     .menu-link:hover .menu-icon {
         animation: iconBounce 0.6s ease;
-        color: var(--accent-amber);
+        color: var(--orange-600);
     }
     
     .menu-text {
@@ -448,7 +496,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
         transform: translateY(-50%);
         width: 4px;
         height: 0;
-        background: var(--accent-amber);
+        background: var(--orange-600);
         border-radius: 2px 0 0 2px;
         transition: height var(--transition-normal);
     }
@@ -489,7 +537,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
     
     .status-text {
         font-size: 0.875rem;
-        color: var(--gray-300);
+        color: white;
     }
     
     .system-stats {
@@ -503,7 +551,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
         align-items: center;
         gap: 0.5rem;
         font-size: 0.75rem;
-        color: var(--gray-400);
+        color: rgba(255, 255, 255, 0.9);
     }
     
     .stat-item i {
@@ -520,7 +568,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
     .quick-action-btn {
         background: rgba(255, 255, 255, 0.1);
         border: 1px solid rgba(255, 255, 255, 0.2);
-        color: var(--gray-300);
+        color: white;
         border-radius: var(--radius);
         padding: 0.5rem;
         cursor: pointer;
@@ -544,7 +592,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(234, 88, 12, 0.8);
             backdrop-filter: blur(4px);
             z-index: 99;
     }
@@ -588,16 +636,16 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
     }
     
     .sidebar::-webkit-scrollbar-track {
-        background: var(--gray-800);
+        background: var(--orange-300);
     }
     
     .sidebar::-webkit-scrollbar-thumb {
-        background: var(--primary-indigo);
+        background: var(--orange-600);
         border-radius: 3px;
     }
     
     .sidebar::-webkit-scrollbar-thumb:hover {
-        background: var(--primary-indigo-light);
+        background: var(--orange-400);
     }
 </style>
 
@@ -626,7 +674,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
             
             // Enhanced hover effects
             link.addEventListener('mouseenter', function() {
-                this.style.boxShadow = '0 4px 12px rgba(79, 70, 229, 0.2)';
+                this.style.boxShadow = '0 4px 12px rgba(234, 88, 12, 0.2)';
             });
             
             link.addEventListener('mouseleave', function() {
@@ -679,7 +727,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
             height: ${size}px;
             left: ${x}px;
             top: ${y}px;
-            background: rgba(245, 158, 11, 0.3);
+            background: rgba(255, 255, 255, 0.3);
             border-radius: 50%;
             transform: scale(0);
             animation: menuRipple 0.6s linear;
@@ -706,7 +754,21 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
     
     function toggleSidebar() {
         const sidebar = document.getElementById('sidebar');
+        const mainContent = document.querySelector('.main-content');
+        const toggleBtn = document.getElementById('sidebarToggle');
+        const quickToggle = document.getElementById('sidebarQuickToggle');
+        
         sidebar.classList.toggle('collapsed');
+        
+        if (sidebar.classList.contains('collapsed')) {
+            mainContent.classList.add('sidebar-collapsed');
+            if (toggleBtn) toggleBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+            if (quickToggle) quickToggle.className = 'fas fa-chevron-right';
+        } else {
+            mainContent.classList.remove('sidebar-collapsed');
+            if (toggleBtn) toggleBtn.innerHTML = '<i class="fas fa-bars"></i>';
+            if (quickToggle) quickToggle.className = 'fas fa-chevron-left';
+        }
     }
     
     function closeSidebar() {

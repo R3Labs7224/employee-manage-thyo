@@ -24,7 +24,7 @@ $salaries = [];
 $employees = [];
 
 try {
-    // Simple query
+    // Simple query with all salary components
     $stmt = $pdo->query("
         SELECT s.*, 
                e.name as employee_name,
@@ -128,9 +128,24 @@ if (!function_exists('formatCurrency')) {
                                             <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">Employee</th>
                                             <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">Month</th>
                                             <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">Basic Salary</th>
+                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">HRA</th>
+                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">Other Allowances</th>
+                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">Gross Salary</th>
+                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">Special Allowance</th>
+                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">Total Salary</th>
+                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">EPF (Employee)</th>
+                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">ESI (Employee)</th>
+                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">EPF (Employer)</th>
+                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">ESI (Employer)</th>
+                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">Professional Tax</th>
+                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">TDS</th>
+                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">Gratuity</th>
+                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">GHI</th>
+                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">Variable Bonus</th>
                                             <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">Net Salary</th>
                                             <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">Status</th>
                                             <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600;">Generated</th>
+                                            <th style="padding: 12px; text-align: center; border-bottom: 2px solid #dee2e6; font-weight: 600;">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -138,7 +153,7 @@ if (!function_exists('formatCurrency')) {
                                         <tr style="border-bottom: 1px solid #eee;">
                                             <td style="padding: 12px;">
                                                 <div>
-                                                    <strong style="color: #007bff;"><?php echo htmlspecialchars($salary['employee_code'] ?? 'N/A'); ?></strong><br>
+                                                    <strong style="color: var(--primary-red);"><?php echo htmlspecialchars($salary['employee_code'] ?? 'N/A'); ?></strong><br>
                                                     <span style="color: #333;"><?php echo htmlspecialchars($salary['employee_name'] ?? 'Unknown'); ?></span><br>
                                                     <small style="color: #666;"><?php echo htmlspecialchars($salary['department_name'] ?? 'No Dept'); ?></small>
                                                 </div>
@@ -152,9 +167,21 @@ if (!function_exists('formatCurrency')) {
                                                 }
                                                 ?>
                                             </td>
-                                            <td style="padding: 12px;">
-                                                <?php echo formatCurrency($salary['basic_salary'] ?? 0); ?>
-                                            </td>
+                                            <td style="padding: 12px;"><?php echo formatCurrency($salary['basic_salary'] ?? 0); ?></td>
+                                            <td style="padding: 12px;"><?php echo formatCurrency($salary['hra'] ?? 0); ?></td>
+                                            <td style="padding: 12px;"><?php echo formatCurrency($salary['other_allowances'] ?? 0); ?></td>
+                                            <td style="padding: 12px;"><?php echo formatCurrency($salary['gross_salary'] ?? 0); ?></td>
+                                            <td style="padding: 12px;"><?php echo formatCurrency($salary['special_allowance'] ?? 0); ?></td>
+                                            <td style="padding: 12px;"><strong style="color: var(--primary-red);"><?php echo formatCurrency($salary['total_salary'] ?? 0); ?></strong></td>
+                                            <td style="padding: 12px;"><?php echo formatCurrency($salary['epf_employee'] ?? 0); ?></td>
+                                            <td style="padding: 12px;"><?php echo formatCurrency($salary['esi_employee'] ?? 0); ?></td>
+                                            <td style="padding: 12px;"><?php echo formatCurrency($salary['epf_employer'] ?? 0); ?></td>
+                                            <td style="padding: 12px;"><?php echo formatCurrency($salary['esi_employer'] ?? 0); ?></td>
+                                            <td style="padding: 12px;"><?php echo formatCurrency($salary['professional_tax'] ?? 0); ?></td>
+                                            <td style="padding: 12px;"><?php echo formatCurrency($salary['tds'] ?? 0); ?></td>
+                                            <td style="padding: 12px;"><?php echo formatCurrency($salary['gratuity'] ?? 0); ?></td>
+                                            <td style="padding: 12px;"><?php echo formatCurrency($salary['ghi'] ?? 0); ?></td>
+                                            <td style="padding: 12px;"><?php echo formatCurrency($salary['variable_bonus'] ?? 0); ?></td>
                                             <td style="padding: 12px;">
                                                 <strong style="color: #28a745;">
                                                     <?php echo formatCurrency($salary['net_salary'] ?? 0); ?>
@@ -176,6 +203,14 @@ if (!function_exists('formatCurrency')) {
                                                     }
                                                     ?>
                                                 </span>
+                                            </td>
+                                            <td style="padding: 12px; text-align: center;">
+                                                <a href="edit.php?id=<?php echo $salary['id']; ?>" 
+                                                   style="display: inline-block; padding: 6px 12px; background: var(--primary-red); color: white; 
+                                                          text-decoration: none; border-radius: 4px; font-size: 12px; font-weight: 500;
+                                                          transition: background-color 0.2s;">
+                                                    <i class="fas fa-edit"></i> Edit
+                                                </a>
                                             </td>
                                         </tr>
                                         <?php endforeach; ?>

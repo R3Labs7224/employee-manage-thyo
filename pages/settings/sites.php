@@ -237,6 +237,11 @@ try {
                 <input type="hidden" id="edit_id" name="id">
                 
                 <div class="form-group">
+                    <label for="edit_name">Site Name *</label>
+                    <input type="text" id="edit_name" name="name" class="form-control" required>
+                </div>
+                
+                <div class="form-group">
                     <label for="edit_address">Address</label>
                     <textarea id="edit_address" name="address" class="form-control" rows="3"></textarea>
                 </div>
@@ -283,4 +288,5 @@ try {
         });
     </script>
 
-<?php include '../../components/footer.php'; ?>_name">Site Name *</label>
+</body>
+</html>
