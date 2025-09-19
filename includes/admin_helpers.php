@@ -21,7 +21,7 @@ function canAccessModule($module) {
     $modulePermissions = [
         'employees' => ['employees.view'],
         'attendance' => ['attendance.view'],
-        'petty_cash' => ['petty_cash.view'],
+        'expenses' => ['expenses.view'],
         'salary' => ['salary.view'],
         'tasks' => ['tasks.view'],
         'leave' => ['leave.view'],
@@ -57,7 +57,7 @@ function canPerformAction($action, $module = null) {
             'default' => 'delete'
         ],
         'approve' => [
-            'petty_cash' => 'petty_cash.approve',
+            'expenses' => 'expenses.approve',
             'leave' => 'leave.approve',
             'default' => 'approve'
         ],
@@ -200,8 +200,8 @@ function renderPermissionBadges($permissions) {
         'employees.delete' => 'Delete Employees',
         'attendance.view' => 'View Attendance',
         'attendance.manage' => 'Manage Attendance',
-        'petty_cash.view' => 'View Petty Cash',
-        'petty_cash.approve' => 'Approve Petty Cash',
+        'expenses.view' => 'View Expenses',
+        'expenses.approve' => 'Approve Expenses',
         'salary.view' => 'View Salary',
         'salary.manage' => 'Manage Salary',
         'tasks.view' => 'View Tasks',

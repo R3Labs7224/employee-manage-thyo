@@ -70,14 +70,14 @@ try {
     $stmt->execute([$employee['id']]);
     $monthly_stats = $stmt->fetch();
     
-    // Get pending petty cash count
+    // Get pending expenses count
     $stmt = $pdo->prepare("
         SELECT COUNT(*) as pending_count
-        FROM petty_cash_requests 
+        FROM expenses
         WHERE employee_id = ? AND status = 'pending'
     ");
     $stmt->execute([$employee['id']]);
-    $pending_petty_cash = $stmt->fetchColumn();
+    $pending_expenses = $stmt->fetchColumn();
     
     // Get active tasks count
     $stmt = $pdo->prepare("
@@ -101,7 +101,7 @@ try {
             'approved_days' => (int)($monthly_stats['approved_days'] ?? 0),
             'total_sessions' => (int)($monthly_stats['total_approved_sessions'] ?? 0)
         ],
-        'pending_petty_cash' => (int)$pending_petty_cash,
+        'pending_petty_cash' => (int)$pending_expenses,
         'active_tasks' => (int)$active_tasks,
         'permissions' => [
             'can_checkin' => true,

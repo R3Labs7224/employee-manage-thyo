@@ -48,8 +48,8 @@ function getStats($pdo) {
     $stmt = $pdo->query("SELECT COUNT(*) as total FROM attendance WHERE date = CURDATE()");
     $stats['today_attendance'] = $stmt->fetch()['total'];
     
-    // Pending petty cash requests
-    $stmt = $pdo->query("SELECT COUNT(*) as total FROM petty_cash_requests WHERE status = 'pending'");
+    // Pending expense requests
+    $stmt = $pdo->query("SELECT COUNT(*) as total FROM expenses WHERE status = 'pending'");
     $stats['pending_requests'] = $stmt->fetch()['total'];
     
     // Active tasks

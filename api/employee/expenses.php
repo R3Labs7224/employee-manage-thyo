@@ -17,28 +17,35 @@ $method = $_SERVER['REQUEST_METHOD'];
 
 switch ($method) {
     case 'GET':
-        getPettyCashRequests($pdo, $employee);
+        getExpenseRequests($pdo, $employee);
         break;
     case 'POST':
-        createPettyCashRequest($pdo, $employee);
+        createExpenseRequest($pdo, $employee);
         break;
     default:
         sendError('Method not allowed', 405);
 }
 
-function getPettyCashRequests($pdo, $employee) {
+function getExpenseRequests($pdo, $employee) {
     $month = $_GET['month'] ?? date('Y-m');
-    
+
     try {
-        // Get all petty cash requests for the employee in the specified month
+        // Get all expense requests for the employee in the specified month with category and task info
         $stmt = $pdo->prepare("
-            SELECT p.*, u.username as approved_by_name
-            FROM petty_cash_requests p
-            LEFT JOIN users u ON p.approved_by = u.id
-            WHERE p.employee_id = ? AND DATE_FORMAT(p.request_date, '%Y-%m') = ?
-            ORDER BY p.created_at DESC
+            SELECT e.*,
+                   u.username as approved_by_name,
+                   ec.name as category_name,
+                   ec.description as category_description,
+                   t.title as task_title,
+                   t.id as task_id
+            FROM expenses e
+            LEFT JOIN users u ON e.approved_by = u.id
+            LEFT JOIN expense_categories ec ON e.category_id = ec.id
+            LEFT JOIN tasks t ON e.task_id = t.id
+            WHERE e.employee_id = ? AND DATE_FORMAT(e.request_date, '%Y-%m') = ?
+            ORDER BY e.created_at DESC
         ");
-        
+
         $stmt->execute([$employee['id'], $month]);
         $all_requests = $stmt->fetchAll();
         
@@ -85,7 +92,7 @@ function getPettyCashRequests($pdo, $employee) {
             }
         }
         
-        sendSuccess('Petty cash requests retrieved successfully', [
+        sendSuccess('Expense requests retrieved successfully', [
             'requests' => $requests_to_return,
             'summary' => [
                 'total_requests' => count($requests_to_return),
@@ -101,44 +108,72 @@ function getPettyCashRequests($pdo, $employee) {
     }
 }
 
-function createPettyCashRequest($pdo, $employee) {
+function createExpenseRequest($pdo, $employee) {
     $input = json_decode(file_get_contents('php://input'), true);
-    
-    validateRequired(['amount', 'reason'], $input);
-    
+
+    validateRequired(['amount', 'reason', 'category_id'], $input);
+
     $amount = (float)$input['amount'];
     $reason = trim($input['reason']);
+    $category_id = (int)$input['category_id'];
+    $task_id = isset($input['task_id']) ? (int)$input['task_id'] : null;
+    $receipt_number = trim($input['receipt_number'] ?? '');
     $request_date = $input['request_date'] ?? date('Y-m-d');
-    
+
     if ($amount <= 0) {
         sendError('Amount must be greater than zero', 400);
     }
-    
+
     if (strlen($reason) < 10) {
         sendError('Reason must be at least 10 characters long', 400);
     }
-    
+
+    // Validate category exists
+    $category_stmt = $pdo->prepare("SELECT id FROM expense_categories WHERE id = ? AND is_active = 1");
+    $category_stmt->execute([$category_id]);
+    if (!$category_stmt->fetch()) {
+        sendError('Invalid category selected', 400);
+    }
+
+    // Validate task if provided (must belong to employee or be assigned to them)
+    if ($task_id) {
+        $task_stmt = $pdo->prepare("
+            SELECT t.id FROM tasks t
+            LEFT JOIN task_assignments ta ON t.id = ta.task_id
+            WHERE t.id = ? AND (
+                t.employee_id = ? OR
+                (t.admin_created = 1 AND ta.assigned_to = ?)
+            )
+        ");
+        $task_stmt->execute([$task_id, $employee['id'], $employee['id']]);
+        if (!$task_stmt->fetch()) {
+            sendError('Invalid task selected or task not assigned to you', 400);
+        }
+    }
+
     try {
         // Handle receipt image upload
         $receipt_filename = null;
         if (isset($input['receipt_image']) && !empty($input['receipt_image'])) {
-            $receipt_filename = uploadBase64Image($input['receipt_image'], '../../assets/images/uploads/petty_cash/');
+            $receipt_filename = uploadBase64Image($input['receipt_image'], '../../assets/images/uploads/expenses/');
         }
-        
-        // Create new petty cash request
+
+        // Create new expense request
         $stmt = $pdo->prepare("
-            INSERT INTO petty_cash_requests (
-                employee_id, amount, reason, receipt_image, request_date
-            ) VALUES (?, ?, ?, ?, ?)
+            INSERT INTO expenses (
+                employee_id, amount, category_id, task_id, reason,
+                receipt_image, receipt_number, request_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ");
-        
+
         $stmt->execute([
-            $employee['id'], $amount, $reason, $receipt_filename, $request_date
+            $employee['id'], $amount, $category_id, $task_id, $reason,
+            $receipt_filename, $receipt_number, $request_date
         ]);
-        
+
         $request_id = $pdo->lastInsertId();
-        
-        sendSuccess('Petty cash request submitted successfully', ['request_id' => $request_id]);
+
+        sendSuccess('Expense request submitted successfully', ['request_id' => $request_id]);
         
     } catch (PDOException $e) {
         sendError('Database error occurred', 500);

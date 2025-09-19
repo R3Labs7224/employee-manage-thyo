@@ -1,13 +1,13 @@
 <?php
 // Database configuration
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'employee_management_system');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+// define('DB_NAME', 'employee_management_system');
+// define('DB_USER', 'root');
+// define('DB_PASS', '');
 
-// define('DB_NAME', 'maagroup_ems');
-// define('DB_USER', 'maagroup_ems');
-// define('DB_PASS', 'PmJYET2bZrwfy3kZD2dG');
+define('DB_NAME', 'maagroup_ems');
+define('DB_USER', 'maagroup_ems');
+define('DB_PASS', 'PmJYET2bZrwfy3kZD2dG');
 
 
 try {

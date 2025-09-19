@@ -137,7 +137,7 @@ function hasPermission($user, $permission) {
             'view_attendance',
             'manage_attendance',
             'view_reports',
-            'manage_petty_cash',
+            'manage_expenses',
             'view_salary'
         ],
         'hr' => [
@@ -168,7 +168,7 @@ function validateEmployeePermission($employee, $action) {
             return $employee['status'] === 'active';
         case 'create_task':
             return $employee['status'] === 'active';
-        case 'petty_cash_request':
+        case 'expense_request':
             return $employee['status'] === 'active';
         default:
             return false;

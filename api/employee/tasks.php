@@ -25,6 +25,9 @@ switch ($method) {
     case 'PUT':
         completeTask($pdo, $employee);
         break;
+    case 'PATCH': 
+        updateAssignmentStatus($pdo, $employee);
+        break;
     default:
         sendError('Method not allowed', 405);
 }
@@ -110,8 +113,8 @@ function getTasks($pdo, $employee) {
             WHERE (
                 -- Self-created tasks
                 (t.employee_id = ? AND DATE(t.created_at) = ?) OR
-                -- Admin-assigned tasks (show all assigned tasks, not just today's)
-                (t.admin_created = 1 AND ta.assigned_to = ?)
+                -- Admin-assigned tasks (only those with valid assignment records)
+                (t.admin_created = 1 AND ta.assigned_to = ? AND ta.id IS NOT NULL)
             )
             ORDER BY t.created_at DESC
         ";
@@ -157,7 +160,7 @@ function getTasks($pdo, $employee) {
             LEFT JOIN task_assignments ta ON t.id = ta.task_id AND ta.assigned_to = ?
             WHERE (
                 (t.employee_id = ? AND DATE(t.created_at) = ?) OR
-                (t.admin_created = 1 AND ta.assigned_to = ?)
+                (t.admin_created = 1 AND ta.assigned_to = ? AND ta.id IS NOT NULL)
             )
         ");
         $summary_stmt->execute([

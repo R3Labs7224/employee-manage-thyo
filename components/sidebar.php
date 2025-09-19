@@ -17,7 +17,7 @@ function isActiveMenu($page, $currentPage, $currentDir = '') {
 $currentDirName = basename(dirname($_SERVER['PHP_SELF']));
 $basePath = '';
 
-if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports', 'settings', 'tasks', 'salary','leave'])) {
+if (in_array($currentDirName, ['employees', 'attendance', 'expenses', 'reports', 'settings', 'tasks', 'salary','leave'])) {
     $basePath = '../../';
 } else {
     $basePath = '';
@@ -97,15 +97,15 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
                 </h4>
             </li>
 
-            <?php if (hasAdminPermission('petty_cash.view')): ?>
+            <?php if (hasAdminPermission('expenses.view')): ?>
             <li class="menu-item">
-                <a href="<?php echo $basePath; ?>pages/petty_cash/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/petty_cash/') !== false) ? 'active' : ''; ?>" data-tooltip="Petty Cash Requests">
+                <a href="<?php echo $basePath; ?>pages/expenses/index.php" class="menu-link <?php echo (strpos($_SERVER['REQUEST_URI'], '/expenses/') !== false) ? 'active' : ''; ?>" data-tooltip="Expense Management">
                     <div class="menu-icon-wrapper">
-                        <i class="fas fa-wallet menu-icon"></i>
+                        <i class="fas fa-receipt menu-icon"></i>
                     </div>
-                    <span class="menu-text">Petty Cash</span>
+                    <span class="menu-text">Expenses</span>
                     <div class="menu-badge pending">
-                        <span class="badge-count" id="pettyRequestCount">--</span>
+                        <span class="badge-count" id="expenseRequestCount">--</span>
                     </div>
                     <div class="menu-indicator"></div>
                 </a>
@@ -698,7 +698,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'petty_cash', 'reports
         try {
             // You can replace this with actual API call to get counts
             updateMenuCount('employeeCount', 0);
-            updateMenuCount('pettyRequestCount', 0);
+            updateMenuCount('expenseRequestCount', 0);
         } catch (error) {
             console.log('Could not load menu counts:', error);
         }

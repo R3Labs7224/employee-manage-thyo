@@ -70,13 +70,28 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors[] = 'Invalid email format';
     }
+
+    // Mandatory field validation
+    if (empty($date_of_birth)) $errors[] = 'Date of Birth is required';
+    if (empty($aadhar_number)) $errors[] = 'Aadhar Number is required';
+    if (empty($designation)) $errors[] = 'Designation is required';
+    if (empty($reporting_manager_id)) $errors[] = 'Reporting Manager is required';
+    if (empty($shift_id)) $errors[] = 'Shift is required';
+    if (empty($site_id)) $errors[] = 'Site is required';
+    if (empty($basic_salary)) $errors[] = 'Basic Salary is required';
+    if (empty($current_address)) $errors[] = 'Current Address is required';
+
+    // Profile photograph validation
+    if (!isset($_FILES['photograph']) || $_FILES['photograph']['error'] !== 0) {
+        $errors[] = 'Profile Photograph is required';
+    }
     
     // Validate new fields
     if (!empty($uan_number) && !preg_match('/^\d{12}$/', $uan_number)) {
         $errors[] = 'UAN Number must be 12 digits';
     }
-    if (!empty($esic_number) && !preg_match('/^\d{17}$/', $esic_number)) {
-        $errors[] = 'ESIC Number must be 17 digits';
+    if (!empty($esic_number) && !preg_match('/^\d{10}$/', $esic_number)) {
+        $errors[] = 'ESIC Number must be 10 digits (format: 4407500306)';
     }
     if (!empty($aadhar_number) && !preg_match('/^\d{12}$/', $aadhar_number)) {
         $errors[] = 'Aadhar Number must be 12 digits';
@@ -91,7 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $errors[] = 'Emergency Contact Number must be 10 digits';
     }
     
-    // Handle file upload for photograph
+    // Handle file upload for photograph (now mandatory)
     $photograph_path = null;
     if (isset($_FILES['photograph']) && $_FILES['photograph']['error'] == 0) {
         $upload_dir = '../../uploads/employees/photos/';
@@ -288,8 +303,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                         <input type="text" id="employee_code" name="employee_code" class="form-control" required value="<?php echo htmlspecialchars($_POST['employee_code'] ?? ''); ?>">
                                     <div class="form-row">
                                     <div class="form-group">
-                                        <label for="photograph">Profile Photograph</label>
-                                        <input type="file" id="photograph" name="photograph" class="form-control" accept="image/*">
+                                        <label for="photograph">Profile Photograph *</label>
+                                        <input type="file" id="photograph" name="photograph" class="form-control" accept="image/*" required>
                                         <small class="form-text text-muted">Max size: 5MB. Formats: JPG, PNG, GIF</small>
                                     </div>
                                 </div>
@@ -330,8 +345,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 <h4><i class="fas fa-id-card"></i> Personal Information</h4>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="date_of_birth">Date of Birth</label>
-                                        <input type="date" id="date_of_birth" name="date_of_birth" class="form-control" value="<?php echo htmlspecialchars($_POST['date_of_birth'] ?? ''); ?>">
+                                        <label for="date_of_birth">Date of Birth *</label>
+                                        <input type="date" id="date_of_birth" name="date_of_birth" class="form-control" required value="<?php echo htmlspecialchars($_POST['date_of_birth'] ?? ''); ?>">
                                     </div>
                                     
                                     <div class="form-group">
@@ -389,8 +404,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 <h4><i class="fas fa-file-alt"></i> Government Documents</h4>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="aadhar_number">Aadhar Number</label>
-                                        <input type="text" id="aadhar_number" name="aadhar_number" class="form-control" maxlength="12" pattern="\d{12}" value="<?php echo htmlspecialchars($_POST['aadhar_number'] ?? ''); ?>">
+                                        <label for="aadhar_number">Aadhar Number *</label>
+                                        <input type="text" id="aadhar_number" name="aadhar_number" class="form-control" maxlength="12" pattern="\d{12}" required value="<?php echo htmlspecialchars($_POST['aadhar_number'] ?? ''); ?>">
                                         <small class="form-text text-muted">12 digit number</small>
                                     </div>
                                     
@@ -410,8 +425,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     
                                     <div class="form-group">
                                         <label for="esic_number">ESIC Number</label>
-                                        <input type="text" id="esic_number" name="esic_number" class="form-control" maxlength="17" pattern="\d{17}" value="<?php echo htmlspecialchars($_POST['esic_number'] ?? ''); ?>">
-                                        <small class="form-text text-muted">17 digit ESIC number</small>
+                                        <input type="text" id="esic_number" name="esic_number" class="form-control" maxlength="10" pattern="\d{10}" value="<?php echo htmlspecialchars($_POST['esic_number'] ?? ''); ?>">
+                                        <small class="form-text text-muted">10 digit ESIC number (e.g., 4407500306)</small>
                                     </div>
                                 </div>
                             </div>
@@ -421,8 +436,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 <h4><i class="fas fa-briefcase"></i> Professional Information</h4>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="designation">Designation</label>
-                                        <input type="text" id="designation" name="designation" class="form-control" value="<?php echo htmlspecialchars($_POST['designation'] ?? ''); ?>">
+                                        <label for="designation">Designation *</label>
+                                        <input type="text" id="designation" name="designation" class="form-control" required value="<?php echo htmlspecialchars($_POST['designation'] ?? ''); ?>">
                                     </div>
                                     
                                     <div class="form-group">
@@ -440,8 +455,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="reporting_manager_id">Reporting Manager</label>
-                                        <select id="reporting_manager_id" name="reporting_manager_id" class="form-control">
+                                        <label for="reporting_manager_id">Reporting Manager *</label>
+                                        <select id="reporting_manager_id" name="reporting_manager_id" class="form-control" required>
                                             <option value="">Select Reporting Manager</option>
                                             <?php foreach ($managers as $manager): ?>
                                                 <option value="<?php echo $manager['id']; ?>" <?php echo (($_POST['reporting_manager_id'] ?? '') == $manager['id']) ? 'selected' : ''; ?>>
@@ -475,8 +490,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 <h4><i class="fas fa-building"></i> Work Assignment</h4>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="shift_id">Shift</label>
-                                        <select id="shift_id" name="shift_id" class="form-control">
+                                        <label for="shift_id">Shift *</label>
+                                        <select id="shift_id" name="shift_id" class="form-control" required>
                                             <option value="">Select Shift</option>
                                             <?php foreach ($shifts as $shift): ?>
                                                 <option value="<?php echo $shift['id']; ?>" <?php echo (($_POST['shift_id'] ?? '') == $shift['id']) ? 'selected' : ''; ?>>
@@ -487,8 +502,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     </div>
                                     
                                     <div class="form-group">
-                                        <label for="site_id">Site</label>
-                                        <select id="site_id" name="site_id" class="form-control">
+                                        <label for="site_id">Site *</label>
+                                        <select id="site_id" name="site_id" class="form-control" required>
                                             <option value="">Select Site</option>
                                             <?php foreach ($sites as $site): ?>
                                                 <option value="<?php echo $site['id']; ?>" <?php echo (($_POST['site_id'] ?? '') == $site['id']) ? 'selected' : ''; ?>>
@@ -505,8 +520,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 <h4><i class="fas fa-money-bill-wave"></i> Salary Information</h4>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="basic_salary">Basic Salary</label>
-                                        <input type="number" id="basic_salary" name="basic_salary" class="form-control" step="0.01" min="0" value="<?php echo htmlspecialchars($_POST['basic_salary'] ?? ''); ?>">
+                                        <label for="basic_salary">Basic Salary *</label>
+                                        <input type="number" id="basic_salary" name="basic_salary" class="form-control" step="0.01" min="0" required value="<?php echo htmlspecialchars($_POST['basic_salary'] ?? ''); ?>">
                                     </div>
                                     
                                     <div class="form-group">
@@ -528,8 +543,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 <h4><i class="fas fa-map-marker-alt"></i> Address Information</h4>
                                 <div class="form-row full-width">
                                     <div class="form-group">
-                                        <label for="current_address">Current Address</label>
-                                        <textarea id="current_address" name="current_address" class="form-control" rows="3"><?php echo htmlspecialchars($_POST['current_address'] ?? ''); ?></textarea>
+                                        <label for="current_address">Current Address *</label>
+                                        <textarea id="current_address" name="current_address" class="form-control" rows="3" required><?php echo htmlspecialchars($_POST['current_address'] ?? ''); ?></textarea>
                                     </div>
                                 </div>
                                 
@@ -626,7 +641,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         });
         
         document.getElementById('esic_number').addEventListener('input', function() {
-            this.value = this.value.replace(/\D/g, '').substring(0, 17);
+            this.value = this.value.replace(/\D/g, '').substring(0, 10);
         });
         
         // Format PAN number
