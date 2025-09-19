@@ -126,21 +126,46 @@ if (!empty($site_filter)) {
 }
 
 try {
-    // Get tasks with employee and site info
+    // Get tasks with employee and site info (including admin-created tasks)
     $sql = "
-        SELECT t.*, 
-               e.name as employee_name,
-               e.employee_code,
-               s.name as site_name,
-               TIMESTAMPDIFF(MINUTE, t.start_time, COALESCE(t.end_time, NOW())) as duration_minutes
+        SELECT t.*,
+               CASE
+                   WHEN t.admin_created = 1 THEN 'Admin Assigned'
+                   ELSE COALESCE(e.name, 'Unknown Employee')
+               END as employee_name,
+               CASE
+                   WHEN t.admin_created = 1 THEN 'ADMIN'
+                   ELSE COALESCE(e.employee_code, 'N/A')
+               END as employee_code,
+               COALESCE(s.name, 'No Site') as site_name,
+               CASE
+                   WHEN t.admin_created = 1 THEN NULL
+                   ELSE TIMESTAMPDIFF(MINUTE, t.start_time, COALESCE(t.end_time, NOW()))
+               END as duration_minutes,
+               CASE
+                   WHEN t.admin_created = 1 THEN 'admin'
+                   ELSE 'field'
+               END as task_type,
+               CASE
+                   WHEN t.admin_created = 1 THEN
+                       (SELECT COUNT(*) FROM task_assignments ta WHERE ta.task_id = t.id)
+                   ELSE 1
+               END as assignment_count,
+               CASE
+                   WHEN t.admin_created = 1 THEN
+                       (SELECT COUNT(*) FROM task_assignments ta WHERE ta.task_id = t.id AND ta.status = 'completed')
+                   ELSE (CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END)
+               END as completed_count,
+               ab.username as assigned_by_username
         FROM tasks t
-        JOIN employees e ON t.employee_id = e.id
-        JOIN sites s ON t.site_id = s.id
+        LEFT JOIN employees e ON t.employee_id = e.id
+        LEFT JOIN sites s ON t.site_id = s.id
+        LEFT JOIN users ab ON t.assigned_by = ab.id
         WHERE " . implode(' AND ', $where_conditions) . "
         ORDER BY t.created_at DESC
         LIMIT 100
     ";
-    
+
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -255,11 +280,18 @@ try {
                 <div class="card">
                     <div class="card-header">
                         <h3>Tasks Overview</h3>
-                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                            <span class="badge badge-primary">Total: <?php echo count($tasks); ?></span>
-                            <span class="badge badge-warning">Active: <?php echo count(array_filter($tasks, fn($t) => $t['status'] === 'active')); ?></span>
-                            <span class="badge badge-success">Completed: <?php echo count(array_filter($tasks, fn($t) => $t['status'] === 'completed')); ?></span>
-                            <span class="badge badge-danger">Cancelled: <?php echo count(array_filter($tasks, fn($t) => $t['status'] === 'cancelled')); ?></span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                <span class="badge badge-primary">Total: <?php echo count($tasks); ?></span>
+                                <span class="badge badge-warning">Active: <?php echo count(array_filter($tasks, fn($t) => $t['status'] === 'active')); ?></span>
+                                <span class="badge badge-success">Completed: <?php echo count(array_filter($tasks, fn($t) => $t['status'] === 'completed')); ?></span>
+                                <span class="badge badge-danger">Cancelled: <?php echo count(array_filter($tasks, fn($t) => $t['status'] === 'cancelled')); ?></span>
+                            </div>
+                            <?php if (hasAdminPermission('tasks.manage')): ?>
+                            <a href="assign.php" class="btn btn-primary" style="padding: 0.5rem 1rem; text-decoration: none;">
+                                <i class="fas fa-plus"></i> Assign Task
+                            </a>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <div class="card-body">
@@ -295,11 +327,11 @@ try {
                                                        style="transform: scale(1.2);">
                                             </th>
                                             <?php endif; ?>
-                                            <th>Employee</th>
+                                            <th>Employee/Assigned</th>
                                             <th>Task</th>
                                             <th>Site</th>
-                                            <th>Start Time</th>
-                                            <th>Duration</th>
+                                            <th>Created/Start Time</th>
+                                            <th>Duration/Assignments</th>
                                             <th>Status</th>
                                             <th>Start Location</th>
                                             <th>End Location</th>
@@ -321,6 +353,11 @@ try {
                                             <td>
                                                 <strong><?php echo htmlspecialchars($task['employee_code']); ?></strong><br>
                                                 <small><?php echo htmlspecialchars($task['employee_name']); ?></small>
+                                                <?php if ($task['task_type'] === 'admin'): ?>
+                                                    <?php if ($task['assigned_by_username']): ?>
+                                                        <br><small style="color: #666;">By: <?php echo htmlspecialchars($task['assigned_by_username']); ?></small>
+                                                    <?php endif; ?>
+                                                <?php endif; ?>
                                             </td>
                                             <td>
                                                 <div style="max-width: 200px;">
@@ -328,20 +365,41 @@ try {
                                                     <?php if ($task['description']): ?>
                                                         <br><small style="color: #666;"><?php echo htmlspecialchars(substr($task['description'], 0, 50)); ?><?php echo strlen($task['description']) > 50 ? '...' : ''; ?></small>
                                                     <?php endif; ?>
+                                                    <?php if ($task['task_type'] === 'admin' && $task['priority']): ?>
+                                                        <br><small style="color: #666;">Priority: <?php echo ucfirst($task['priority']); ?></small>
+                                                    <?php endif; ?>
+                                                    <?php if ($task['task_type'] === 'admin' && $task['due_date']): ?>
+                                                        <br><small style="color: #666;">Due: <?php echo formatDate($task['due_date'], 'M d, Y'); ?></small>
+                                                    <?php endif; ?>
                                                 </div>
                                             </td>
                                             <td><?php echo htmlspecialchars($task['site_name']); ?></td>
                                             <td>
-                                                <?php echo formatDate($task['start_time'], 'M d, Y'); ?><br>
-                                                <small><?php echo formatDate($task['start_time'], 'g:i A'); ?></small>
+                                                <?php if ($task['task_type'] === 'admin'): ?>
+                                                    <?php echo formatDate($task['created_at'], 'M d, Y'); ?><br>
+                                                    <small><?php echo formatDate($task['created_at'], 'g:i A'); ?></small>
+                                                <?php else: ?>
+                                                    <?php echo formatDate($task['start_time'], 'M d, Y'); ?><br>
+                                                    <small><?php echo formatDate($task['start_time'], 'g:i A'); ?></small>
+                                                <?php endif; ?>
                                             </td>
                                             <td>
-                                                <?php 
-                                                $hours = floor($task['duration_minutes'] / 60);
-                                                $minutes = $task['duration_minutes'] % 60;
-                                                echo $hours > 0 ? $hours . 'h ' : '';
-                                                echo $minutes . 'm';
-                                                ?>
+                                                <?php if ($task['task_type'] === 'admin'): ?>
+                                                    <strong>
+                                                        <a href="#" onclick="showAssignments(<?php echo $task['id']; ?>); return false;"
+                                                           style="color: #007bff; text-decoration: none; cursor: pointer;">
+                                                            <?php echo $task['assignment_count']; ?> assigned
+                                                        </a>
+                                                    </strong><br>
+                                                    <small><?php echo $task['completed_count']; ?> completed</small>
+                                                <?php else: ?>
+                                                    <?php
+                                                    $hours = floor($task['duration_minutes'] / 60);
+                                                    $minutes = $task['duration_minutes'] % 60;
+                                                    echo $hours > 0 ? $hours . 'h ' : '';
+                                                    echo $minutes . 'm';
+                                                    ?>
+                                                <?php endif; ?>
                                             </td>
                                             <td>
                                                 <span class="badge badge-<?php 
@@ -383,34 +441,57 @@ try {
                                             
                                             <!-- START IMAGE COLUMN -->
                                             <td>
-                                                <?php if ($task['task_image']): ?>
-                                                    <a href="../../assets/images/uploads/tasks/<?php echo $task['task_image']; ?>" 
-                                                       target="_blank" class="btn" style="background: #28a745; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
-                                                        <i class="fas fa-image"></i> Start
-                                                    </a>
+                                                <?php if ($task['task_type'] === 'admin'): ?>
+                                                    <span style="color: #666; font-size: 0.8rem;">Admin Task</span>
                                                 <?php else: ?>
-                                                    <span style="color: #666; font-size: 0.8rem;">No start image</span>
+                                                    <?php if ($task['task_image']): ?>
+                                                        <a href="../../assets/images/uploads/tasks/<?php echo $task['task_image']; ?>"
+                                                           target="_blank" class="btn" style="background: #28a745; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                                                            <i class="fas fa-image"></i> Start
+                                                        </a>
+                                                    <?php else: ?>
+                                                        <span style="color: #666; font-size: 0.8rem;">No start image</span>
+                                                    <?php endif; ?>
                                                 <?php endif; ?>
                                             </td>
-                                            
+
                                             <!-- COMPLETE IMAGE COLUMN -->
                                             <td>
-                                                <?php if ($task['completion_image']): ?>
-                                                    <a href="../../assets/images/uploads/tasks/<?php echo $task['completion_image']; ?>" 
-                                                       target="_blank" class="btn" style="background: #007bff; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
-                                                        <i class="fas fa-image"></i> Complete
-                                                    </a>
+                                                <?php if ($task['task_type'] === 'admin'): ?>
+                                                    <span style="color: #666; font-size: 0.8rem;">Admin Task</span>
                                                 <?php else: ?>
-                                                    <?php if ($task['status'] === 'completed'): ?>
-                                                        <span style="color: #666; font-size: 0.8rem;">No complete image</span>
+                                                    <?php if ($task['completion_image']): ?>
+                                                        <a href="../../assets/images/uploads/tasks/<?php echo $task['completion_image']; ?>"
+                                                           target="_blank" class="btn" style="background: #007bff; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                                                            <i class="fas fa-image"></i> Complete
+                                                        </a>
                                                     <?php else: ?>
-                                                        <span style="color: #666; font-size: 0.8rem;">Task not completed</span>
+                                                        <?php if ($task['status'] === 'completed'): ?>
+                                                            <span style="color: #666; font-size: 0.8rem;">No complete image</span>
+                                                        <?php else: ?>
+                                                            <span style="color: #666; font-size: 0.8rem;">Task not completed</span>
+                                                        <?php endif; ?>
                                                     <?php endif; ?>
                                                 <?php endif; ?>
                                             </td>
                                             
                                             <td>
-                                                <?php if ($task['status'] === 'active' && hasPermission('supervisor')): ?>
+                                                <?php if ($task['task_type'] === 'admin'): ?>
+                                                    <!-- Admin Task Actions -->
+                                                    <?php if (hasPermission('superadmin')): ?>
+                                                    <form method="POST" style="display: inline;">
+                                                        <input type="hidden" name="task_id" value="<?php echo $task['id']; ?>">
+                                                        <input type="hidden" name="action" value="delete">
+                                                        <button type="submit" class="btn"
+                                                                style="background: #e74c3c; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                                                                onclick="return confirm('Are you sure you want to delete this admin task? This action cannot be undone.')">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                    <?php else: ?>
+                                                        <span style="color: #666; font-size: 0.8rem;">Admin Task</span>
+                                                    <?php endif; ?>
+                                                <?php elseif ($task['status'] === 'active' && hasPermission('supervisor')): ?>
                                                     <div style="display: flex; gap: 0.25rem;">
                                                         <form method="POST" style="display: inline;">
                                                             <input type="hidden" name="task_id" value="<?php echo $task['id']; ?>">
@@ -481,6 +562,19 @@ try {
                 <button onclick="closeLocationModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
             </div>
             <div id="mapContainer" style="height: 400px; border: 1px solid #ddd; border-radius: 8px;"></div>
+        </div>
+    </div>
+
+    <!-- Assignments Modal -->
+    <div id="assignmentsModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 2rem; border-radius: 10px; width: 90%; max-width: 600px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 id="assignmentsModalTitle">Task Assignments</h3>
+                <button onclick="closeAssignmentsModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            </div>
+            <div id="assignmentsContent" style="max-height: 400px; overflow-y: auto;">
+                Loading...
+            </div>
         </div>
     </div>
 
@@ -627,6 +721,78 @@ try {
             closeLocationModal();
         }
     });
+
+    document.getElementById('assignmentsModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeAssignmentsModal();
+        }
+    });
+
+    // Show task assignments
+    function showAssignments(taskId) {
+        document.getElementById('assignmentsModal').style.display = 'block';
+        document.getElementById('assignmentsContent').innerHTML = 'Loading...';
+
+        // Fetch task assignments via AJAX
+        fetch('get_task_assignments.php?task_id=' + taskId)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    let html = '<h4 style="margin-bottom: 1rem;">Task: ' + data.task.title + '</h4>';
+
+                    if (data.assignments.length > 0) {
+                        html += '<table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">';
+                        html += '<thead><tr style="border-bottom: 2px solid #dee2e6; background: #f8f9fa;"><th style="padding: 0.75rem; text-align: left;">Employee</th><th style="padding: 0.75rem; text-align: left;">Status</th><th style="padding: 0.75rem; text-align: left;">Progress</th></tr></thead>';
+                        html += '<tbody>';
+
+                        data.assignments.forEach(assignment => {
+                            const statusColor = assignment.status === 'completed' ? '#28a745' :
+                                              assignment.status === 'in_progress' ? '#ffc107' :
+                                              assignment.status === 'cancelled' ? '#dc3545' : '#6c757d';
+
+                            html += `
+                                <tr style="border-bottom: 1px solid #e9ecef;">
+                                    <td style="padding: 0.75rem;">
+                                        <div>
+                                            <strong>${assignment.display_name}</strong>
+                                            <br><small style="color: #666;">${assignment.username}</small>
+                                            ${assignment.employee_code !== 'N/A' ? '<br><small style="color: #666;">' + assignment.employee_code + '</small>' : ''}
+                                        </div>
+                                    </td>
+                                    <td style="padding: 0.75rem;">
+                                        <span style="background: ${statusColor}; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500;">
+                                            ${assignment.status.replace('_', ' ').toUpperCase()}
+                                        </span>
+                                    </td>
+                                    <td style="padding: 0.75rem;">
+                                        <div style="font-size: 0.8rem; color: #666;">
+                                            ${assignment.started_at ? 'Started: ' + new Date(assignment.started_at).toLocaleDateString() : 'Not started'}
+                                            ${assignment.completed_at ? '<br>Completed: ' + new Date(assignment.completed_at).toLocaleDateString() : ''}
+                                            ${assignment.notes ? '<br><em>' + assignment.notes.substring(0, 30) + (assignment.notes.length > 30 ? '...' : '') + '</em>' : ''}
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+
+                        html += '</tbody></table>';
+                    } else {
+                        html += '<p style="color: #666; text-align: center; padding: 2rem;">No assignments found for this task.</p>';
+                    }
+
+                    document.getElementById('assignmentsContent').innerHTML = html;
+                } else {
+                    document.getElementById('assignmentsContent').innerHTML = '<p style="color: #dc3545; text-align: center; padding: 2rem;">Error loading assignments: ' + data.message + '</p>';
+                }
+            })
+            .catch(error => {
+                document.getElementById('assignmentsContent').innerHTML = '<p style="color: #dc3545; text-align: center; padding: 2rem;">Error loading assignments. Please try again.</p>';
+            });
+    }
+
+    function closeAssignmentsModal() {
+        document.getElementById('assignmentsModal').style.display = 'none';
+    }
     </script>
 </body>
 </html>

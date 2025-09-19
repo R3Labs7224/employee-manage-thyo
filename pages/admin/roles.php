@@ -658,7 +658,7 @@ $adminRoles = $stmt->fetchAll();
         }
     </style>
 
-    <script src="../../assets/js/script.js"></script>
+
     <script>
         const availablePermissions = <?php echo json_encode($availablePermissions); ?>;
 

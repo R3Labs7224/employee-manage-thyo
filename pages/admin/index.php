@@ -682,7 +682,7 @@ try {
         }
     </style>
 
-    <script src="../../assets/js/script.js"></script>
+
     <script>
         // Page animations
         document.addEventListener('DOMContentLoaded', function() {
