@@ -2,6 +2,7 @@
 require_once '../../config/database.php';
 require_once '../../includes/session.php';
 require_once '../../includes/functions.php';
+require_once '../../includes/task_identifier.php';
 
 requireLogin();
 
@@ -33,39 +34,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $pdo->beginTransaction();
 
-                // Create main task record
-                $stmt = $pdo->prepare("
-                    INSERT INTO admin_tasks (title, description, priority, due_date, created_by, status)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ");
+                // Generate task identifier ONCE for this task (before creating individual assignments)
+                $site_id = 1; // Default site ID
+                $task_identifier = generateTaskIdentifier($pdo, $title, getSiteNameById($pdo, $site_id));
 
-                if ($stmt->execute([$title, $description, $priority, $due_date, $user['id'], $status])) {
-                    $task_id = $pdo->lastInsertId();
-
-                    // Insert task assignments for selected users
-                    $stmt_assign = $pdo->prepare("
-                        INSERT INTO task_assignments (task_id, assigned_to, assigned_by)
-                        VALUES (?, ?, ?)
+                // Create separate task for each assigned user in unified table
+                $created_count = 0;
+                foreach ($assigned_users as $user_id) {
+                    // Map user ID to employee ID
+                    $emp_stmt = $pdo->prepare("
+                        SELECT e.id FROM employees e
+                        JOIN users u ON e.email = u.email
+                        WHERE u.id = ? AND e.status = 'active'
                     ");
+                    $emp_stmt->execute([$user_id]);
+                    $employee = $emp_stmt->fetch();
 
-                    foreach ($assigned_users as $user_id) {
-                        $stmt_assign->execute([$task_id, $user_id, $user['id']]);
+                    if ($employee) {
+                        $stmt = $pdo->prepare("
+                            INSERT INTO tasks (
+                                title, description, task_type, assigned_to_employee_id, assigned_by_user_id,
+                                site_id, priority, due_date, status, task_identifier, created_at
+                            ) VALUES (?, ?, 'admin_assigned', ?, ?, ?, ?, ?, ?, ?, NOW())
+                        ");
+
+                        if ($stmt->execute([$title, $description, $employee['id'], $user['id'], $site_id, $priority, $due_date, $status, $task_identifier])) {
+                            $created_count++;
+                        }
                     }
+                }
 
+                if ($created_count > 0) {
                     $pdo->commit();
 
-                    logAdminAction('create_task', 'admin_task', $task_id, [
+                    logAdminAction('create_task', 'unified_task', null, [
                         'title' => $title,
-                        'assigned_users' => $assigned_users
+                        'assigned_users' => $assigned_users,
+                        'created_count' => $created_count
                     ]);
 
-                    $message = 'Task created and assigned successfully';
+                    $message = "Task created and assigned to {$created_count} user(s) successfully";
                     $messageType = 'success';
 
                     // Clear form data
                     $_POST = [];
                 } else {
-                    throw new Exception('Failed to create task');
+                    throw new Exception('No valid employees found for assigned users');
                 }
             } catch (Exception $e) {
                 $pdo->rollback();
@@ -83,17 +97,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $new_status = $_POST['new_status'];
 
         try {
-            $stmt = $pdo->prepare("UPDATE admin_tasks SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
-            if ($stmt->execute([$new_status, $task_id])) {
-                logAdminAction('update_task_status', 'admin_task', $task_id, [
-                    'new_status' => $new_status
-                ]);
-                $message = 'Task status updated successfully';
-                $messageType = 'success';
+            // First check if task exists
+            $check_stmt = $pdo->prepare("SELECT id, title, status FROM tasks WHERE id = ? AND task_type = 'admin_assigned'");
+            $check_stmt->execute([$task_id]);
+            $existing_task = $check_stmt->fetch();
+
+            if (!$existing_task) {
+                $message = "Task not found (ID: $task_id)";
+                $messageType = 'error';
+            } else {
+                $stmt = $pdo->prepare("UPDATE tasks SET status = ?, updated_at = NOW() WHERE id = ? AND task_type = 'admin_assigned'");
+                if ($stmt->execute([$new_status, $task_id])) {
+                    $affected_rows = $stmt->rowCount();
+                    if ($affected_rows > 0) {
+                        try {
+                            logAdminAction('update_task_status', 'unified_task', $task_id, [
+                                'old_status' => $existing_task['status'],
+                                'new_status' => $new_status,
+                                'task_title' => $existing_task['title']
+                            ]);
+                        } catch (Exception $log_error) {
+                            // Log error but don't fail the update
+                            error_log("Log admin action failed: " . $log_error->getMessage());
+                        }
+                        $message = 'Task status updated successfully';
+                        $messageType = 'success';
+                    } else {
+                        $message = 'No rows were updated - task may not exist or already has this status';
+                        $messageType = 'error';
+                    }
+                } else {
+                    $message = 'Failed to execute update query';
+                    $messageType = 'error';
+                }
             }
         } catch (PDOException $e) {
-            $message = 'Failed to update task status';
+            $message = 'Database error: ' . $e->getMessage();
             $messageType = 'error';
+            error_log("Task status update error: " . $e->getMessage());
         }
     }
 }
@@ -111,17 +152,19 @@ $stmt = $pdo->prepare("
 $stmt->execute();
 $users = $stmt->fetchAll();
 
-// Get all admin tasks with assignment details
+// Get all admin tasks from unified table (individual assignments)
 $stmt = $pdo->prepare("
-    SELECT at.*,
+    SELECT t.*,
            u.username as created_by_username,
-           COUNT(ta.id) as total_assignments,
-           COUNT(CASE WHEN ta.status = 'completed' THEN 1 END) as completed_assignments
-    FROM admin_tasks at
-    LEFT JOIN users u ON at.created_by = u.id
-    LEFT JOIN task_assignments ta ON at.id = ta.task_id
-    GROUP BY at.id
-    ORDER BY at.created_at DESC
+           e.name as assigned_employee_name,
+           e.employee_code as assigned_employee_code,
+           1 as total_assignments,
+           CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END as completed_assignments
+    FROM tasks t
+    LEFT JOIN users u ON t.assigned_by_user_id = u.id
+    LEFT JOIN employees e ON t.assigned_to_employee_id = e.id
+    WHERE t.task_type = 'admin_assigned'
+    ORDER BY t.created_at DESC
 ");
 $stmt->execute();
 $tasks = $stmt->fetchAll();
@@ -217,6 +260,7 @@ $tasks = $stmt->fetchAll();
                         <table class="table">
                             <thead>
                                 <tr>
+                                    <th>Task ID</th>
                                     <th>Task Details</th>
                                     <th>Priority</th>
                                     <th>Due Date</th>
@@ -230,7 +274,7 @@ $tasks = $stmt->fetchAll();
                             <tbody>
                                 <?php if (empty($tasks)): ?>
                                 <tr>
-                                    <td colspan="8" class="text-center">
+                                    <td colspan="9" class="text-center">
                                         <div class="empty-state">
                                             <i class="fas fa-clipboard-list"></i>
                                             <h4>No Tasks Found</h4>
@@ -241,6 +285,21 @@ $tasks = $stmt->fetchAll();
                                 <?php else: ?>
                                 <?php foreach ($tasks as $task): ?>
                                 <tr>
+                                    <td>
+                                        <div class="task-id-info">
+                                            <?php if (!empty($task['task_identifier'])): ?>
+                                                <span class="task-identifier">MGR-<?php echo htmlspecialchars($task['task_identifier']); ?></span>
+                                            <?php else: ?>
+                                                <span class="task-identifier-placeholder">No ID</span>
+                                            <?php endif; ?>
+                                            <?php if (!empty($task['site_name'])): ?>
+                                                <small class="site-info">
+                                                    <i class="fas fa-map-marker-alt"></i>
+                                                    <?php echo htmlspecialchars($task['site_name']); ?>
+                                                </small>
+                                            <?php endif; ?>
+                                        </div>
+                                    </td>
                                     <td>
                                         <div class="task-info">
                                             <h4 class="task-title"><?php echo htmlspecialchars($task['title']); ?></h4>
@@ -265,16 +324,15 @@ $tasks = $stmt->fetchAll();
                                     <td>
                                         <div class="assignment-info">
                                             <span class="assignment-count">
-                                                <?php echo $task['total_assignments']; ?> assigned
+                                                <strong><?php echo htmlspecialchars($task['assigned_employee_code'] ?? 'N/A'); ?></strong>
                                             </span>
-                                            <?php if ($task['total_assignments'] > 0): ?>
-                                                <small class="assignment-progress">
-                                                    (<?php echo $task['completed_assignments']; ?> completed)
-                                                </small>
-                                            <?php endif; ?>
-                                            <button class="btn btn-sm btn-outline" onclick="viewAssignments(<?php echo $task['id']; ?>)">
-                                                <i class="fas fa-users"></i>
-                                            </button>
+                                            <small class="assignment-progress">
+                                                <?php echo htmlspecialchars($task['assigned_employee_name'] ?? 'Unknown Employee'); ?>
+                                            </small>
+                                            <br>
+                                            <small style="color: #666;">
+                                                Status: <?php echo ucfirst(str_replace('_', ' ', $task['status'])); ?>
+                                            </small>
                                         </div>
                                     </td>
                                     <td>
@@ -434,6 +492,75 @@ $tasks = $stmt->fetchAll();
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
+        }
+
+        .task-id-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            min-width: 120px;
+        }
+
+        .task-identifier {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: var(--orange-600);
+            background: var(--orange-50);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            border: 1px solid var(--orange-200);
+            display: inline-block;
+        }
+
+        .task-identifier-placeholder {
+            font-size: 0.75rem;
+            color: var(--gray-400);
+            font-style: italic;
+        }
+
+        .site-info {
+            font-size: 0.75rem;
+            color: var(--gray-500);
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .site-info i {
+            font-size: 0.65rem;
+        }
+
+        .filter-form {
+            margin: 0;
+        }
+
+        .filter-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 180px;
+            gap: 1rem;
+            align-items: end;
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .filter-buttons .btn {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+
+        @media (max-width: 768px) {
+            .filter-row {
+                grid-template-columns: 1fr;
+                gap: 0.75rem;
+            }
+
+            .filter-buttons {
+                justify-content: center;
+            }
         }
 
         .assignment-info {

@@ -206,8 +206,8 @@ function renderPermissionBadges($permissions) {
         'salary.manage' => 'Manage Salary',
         'tasks.view' => 'View Tasks',
         'tasks.manage' => 'Manage Tasks',
-        'leave.view' => 'View Leave Requests',
-        'leave.approve' => 'Approve Leave Requests',
+        'leave.view' => 'View Leave Request',
+        'leave.approve' => 'Approve Leave Request',
         'reports.view' => 'View Reports',
         'settings.view' => 'View Settings'
     ];

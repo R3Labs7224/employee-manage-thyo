@@ -19,9 +19,12 @@ $pageTitle = 'Edit Salary';
 $message = '';
 $salary = null;
 
-// Get salary ID
+// Get salary ID or employee ID
 $salary_id = (int)($_GET['id'] ?? 0);
-if (!$salary_id) {
+$employee_id = (int)($_GET['employee_id'] ?? 0);
+
+// If neither salary ID nor employee ID is provided, redirect
+if (!$salary_id && !$employee_id) {
     header('Location: index.php');
     exit;
 }
@@ -29,59 +32,169 @@ if (!$salary_id) {
 // Handle form submission
 if ($_POST) {
     try {
-        $stmt = $pdo->prepare("
-            UPDATE salaries SET 
-                basic_salary = ?, hra = ?, other_allowances = ?, gross_salary = ?, 
-                special_allowance = ?, total_salary = ?, epf_employee = ?, esi_employee = ?,
-                epf_employer = ?, esi_employer = ?, professional_tax = ?, tds = ?,
-                gratuity = ?, ghi = ?, variable_bonus = ?, bonus = ?, advance = ?, 
-                deductions = ?, net_salary = ?
-            WHERE id = ?
-        ");
-        
-        $net_salary = (float)$_POST['total_salary'] - (float)$_POST['epf_employee'] - (float)$_POST['esi_employee'] - 
-                     (float)$_POST['professional_tax'] - (float)$_POST['tds'] - (float)$_POST['gratuity'] - 
+        // Calculate values
+        $net_salary = (float)$_POST['total_salary'] - (float)$_POST['esi_employee'] -
+                     (float)$_POST['professional_tax'] - (float)$_POST['tds'] - (float)$_POST['gratuity'] -
                      (float)$_POST['ghi'] - (float)$_POST['advance'] + (float)$_POST['bonus'] + (float)$_POST['variable_bonus'];
-        
-        $total_deductions = (float)$_POST['epf_employee'] + (float)$_POST['esi_employee'] + 
-                           (float)$_POST['professional_tax'] + (float)$_POST['tds'] + 
+
+        $total_deductions = (float)$_POST['esi_employee'] +
+                           (float)$_POST['professional_tax'] + (float)$_POST['tds'] +
                            (float)$_POST['gratuity'] + (float)$_POST['ghi'] + (float)$_POST['advance'];
-        
-        $stmt->execute([
-            $_POST['basic_salary'], $_POST['hra'], $_POST['other_allowances'], $_POST['gross_salary'],
-            $_POST['special_allowance'], $_POST['total_salary'], $_POST['epf_employee'], $_POST['esi_employee'],
-            $_POST['epf_employer'], $_POST['esi_employer'], $_POST['professional_tax'], $_POST['tds'],
-            $_POST['gratuity'], $_POST['ghi'], $_POST['variable_bonus'], $_POST['bonus'], $_POST['advance'],
-            $total_deductions, $net_salary, $salary_id
-        ]);
-        
-        $message = "Salary updated successfully!";
-        
+
+        $current_month = $_POST['month'] ?? date('n');
+        $current_year = $_POST['year'] ?? date('Y');
+
+        if ($salary_id) {
+            // Update existing salary record
+            $stmt = $pdo->prepare("
+                UPDATE salaries SET
+                    basic_salary = ?, hra = ?, other_allowances = ?, gross_salary = ?,
+                    special_allowance = ?, total_salary = ?, esi_employee = ?,
+                    esi_employer = ?, professional_tax = ?, tds = ?,
+                    gratuity = ?, ghi = ?, variable_bonus = ?, bonus = ?, advance = ?,
+                    deductions = ?, net_salary = ?, month = ?, year = ?
+                WHERE id = ?
+            ");
+
+            $stmt->execute([
+                $_POST['basic_salary'], $_POST['hra'], $_POST['other_allowances'], $_POST['gross_salary'],
+                $_POST['special_allowance'], $_POST['total_salary'], $_POST['esi_employee'],
+                $_POST['esi_employer'], $_POST['professional_tax'], $_POST['tds'],
+                $_POST['gratuity'], $_POST['ghi'], $_POST['variable_bonus'], $_POST['bonus'], $_POST['advance'],
+                $total_deductions, $net_salary, $current_month, $current_year, $salary_id
+            ]);
+
+            $message = "Salary updated successfully!";
+        } else {
+            // Check if salary record already exists for this employee, month, and year
+            $check_stmt = $pdo->prepare("SELECT id FROM salaries WHERE employee_id = ? AND month = ? AND year = ?");
+            $check_stmt->execute([$employee_id, $current_month, $current_year]);
+            $existing_record = $check_stmt->fetch();
+
+            if ($existing_record) {
+                // Update existing record instead of creating new one
+                $stmt = $pdo->prepare("
+                    UPDATE salaries SET
+                        basic_salary = ?, hra = ?, other_allowances = ?, gross_salary = ?,
+                        special_allowance = ?, total_salary = ?, esi_employee = ?,
+                        esi_employer = ?, professional_tax = ?, tds = ?,
+                        gratuity = ?, ghi = ?, variable_bonus = ?, bonus = ?, advance = ?,
+                        deductions = ?, net_salary = ?
+                    WHERE id = ?
+                ");
+
+                $stmt->execute([
+                    $_POST['basic_salary'], $_POST['hra'], $_POST['other_allowances'], $_POST['gross_salary'],
+                    $_POST['special_allowance'], $_POST['total_salary'], $_POST['esi_employee'],
+                    $_POST['esi_employer'], $_POST['professional_tax'], $_POST['tds'],
+                    $_POST['gratuity'], $_POST['ghi'], $_POST['variable_bonus'], $_POST['bonus'], $_POST['advance'],
+                    $total_deductions, $net_salary, $existing_record['id']
+                ]);
+
+                $salary_id = $existing_record['id'];
+                $message = "Salary record updated successfully!";
+            } else {
+                // Create new salary record
+                $stmt = $pdo->prepare("
+                    INSERT INTO salaries (
+                        employee_id, month, year, basic_salary, hra, other_allowances, gross_salary,
+                        special_allowance, total_salary, esi_employee, esi_employer,
+                        professional_tax, tds, gratuity, ghi, variable_bonus, bonus, advance,
+                        deductions, net_salary, status, generated_date, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', NOW(), NOW())
+                ");
+
+                $stmt->execute([
+                    $employee_id, $current_month, $current_year, $_POST['basic_salary'], $_POST['hra'],
+                    $_POST['other_allowances'], $_POST['gross_salary'], $_POST['special_allowance'], $_POST['total_salary'],
+                    $_POST['esi_employee'], $_POST['esi_employer'],
+                    $_POST['professional_tax'], $_POST['tds'], $_POST['gratuity'], $_POST['ghi'], $_POST['variable_bonus'],
+                    $_POST['bonus'], $_POST['advance'], $total_deductions, $net_salary
+                ]);
+
+                $salary_id = $pdo->lastInsertId();
+                $message = "Salary record created successfully!";
+            }
+        }
+
     } catch (Exception $e) {
-        $message = "Error updating salary: " . $e->getMessage();
+        $message = "Error saving salary: " . $e->getMessage();
     }
 }
 
 // Get salary data
 try {
-    $stmt = $pdo->prepare("
-        SELECT s.*, 
-               e.name as employee_name,
-               e.employee_code,
-               COALESCE(d.name, 'No Department') as department_name
-        FROM salaries s
-        JOIN employees e ON s.employee_id = e.id
-        LEFT JOIN departments d ON e.department_id = d.id
-        WHERE s.id = ?
-    ");
-    $stmt->execute([$salary_id]);
-    $salary = $stmt->fetch();
-    
-    if (!$salary) {
-        header('Location: index.php');
-        exit;
+    if ($salary_id) {
+        // Editing existing salary record
+        $stmt = $pdo->prepare("
+            SELECT s.*,
+                   e.name as employee_name,
+                   e.employee_code,
+                   COALESCE(d.name, 'No Department') as department_name
+            FROM salaries s
+            JOIN employees e ON s.employee_id = e.id
+            LEFT JOIN departments d ON e.department_id = d.id
+            WHERE s.id = ?
+        ");
+        $stmt->execute([$salary_id]);
+        $salary = $stmt->fetch();
+
+        if (!$salary) {
+            header('Location: index.php');
+            exit;
+        }
+        $employee_id = $salary['employee_id'];
+    } else {
+        // Creating new salary record for employee
+        $stmt = $pdo->prepare("
+            SELECT e.id as employee_id,
+                   e.name as employee_name,
+                   e.employee_code,
+                   e.basic_salary as employee_basic_salary,
+                   COALESCE(d.name, 'No Department') as department_name
+            FROM employees e
+            LEFT JOIN departments d ON e.department_id = d.id
+            WHERE e.id = ? AND e.status = 'active'
+        ");
+        $stmt->execute([$employee_id]);
+        $employee = $stmt->fetch();
+
+        if (!$employee) {
+            header('Location: index.php');
+            exit;
+        }
+
+        // Create default salary array for new record
+        $salary = [
+            'id' => null,
+            'employee_id' => $employee['employee_id'],
+            'employee_name' => $employee['employee_name'],
+            'employee_code' => $employee['employee_code'],
+            'department_name' => $employee['department_name'],
+            'month' => date('n'),
+            'year' => date('Y'),
+            'basic_salary' => $employee['employee_basic_salary'] ?? 0,
+            'hra' => 0,
+            'other_allowances' => 0,
+            'gross_salary' => 0,
+            'special_allowance' => 0,
+            'total_salary' => $employee['employee_basic_salary'] ?? 0,
+            'esi_employee' => 0,
+            'esi_employer' => 0,
+            'professional_tax' => 0,
+            'tds' => 0,
+            'gratuity' => 0,
+            'ghi' => 0,
+            'variable_bonus' => 0,
+            'bonus' => 0,
+            'advance' => 0,
+            'deductions' => 0,
+            'net_salary' => $employee['employee_basic_salary'] ?? 0,
+            'status' => 'draft'
+        ];
+        $pageTitle = 'Create Salary Record';
     }
-    
+
 } catch (Exception $e) {
     $message = "Error: " . $e->getMessage();
 }
@@ -227,29 +340,15 @@ if (!function_exists('formatCurrency')) {
                                     
                                     <div style="display: grid; gap: 15px;">
                                         <div>
-                                            <label style="display: block; margin-bottom: 5px; font-weight: 600;">EPF (Employee)</label>
-                                            <input type="number" name="epf_employee" step="0.01" 
-                                                   value="<?php echo $salary['epf_employee'] ?? 0; ?>"
-                                                   style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
-                                        </div>
-                                        
-                                        <div>
                                             <label style="display: block; margin-bottom: 5px; font-weight: 600;">ESI (Employee)</label>
-                                            <input type="number" name="esi_employee" step="0.01" 
+                                            <input type="number" name="esi_employee" step="0.01"
                                                    value="<?php echo $salary['esi_employee'] ?? 0; ?>"
                                                    style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
                                         </div>
-                                        
-                                        <div>
-                                            <label style="display: block; margin-bottom: 5px; font-weight: 600;">EPF (Employer)</label>
-                                            <input type="number" name="epf_employer" step="0.01" 
-                                                   value="<?php echo $salary['epf_employer'] ?? 0; ?>"
-                                                   style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
-                                        </div>
-                                        
+
                                         <div>
                                             <label style="display: block; margin-bottom: 5px; font-weight: 600;">ESI (Employer)</label>
-                                            <input type="number" name="esi_employer" step="0.01" 
+                                            <input type="number" name="esi_employer" step="0.01"
                                                    value="<?php echo $salary['esi_employer'] ?? 0; ?>"
                                                    style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
                                         </div>
@@ -294,7 +393,7 @@ if (!function_exists('formatCurrency')) {
                             
                             <!-- Submit Button -->
                             <div style="margin-top: 30px; text-align: center; padding-top: 20px; border-top: 1px solid #eee;">
-                                <button type="submit" style="padding: 12px 30px; background: var(--primary-red); color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer;">
+                                <button type="submit" style="padding: 12px 30px; background: #f97316; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; transition: background-color 0.2s;">
                                     <i class="fas fa-save"></i> Update Salary
                                 </button>
                             </div>

@@ -148,18 +148,31 @@ function handleCheckInOut($pdo, $employee) {
             ]);
             
         } else { // check_out
+            // Check if employee has been force logged out today
+            $stmt = $pdo->prepare("
+                SELECT * FROM activity_logs
+                WHERE employee_id = ? AND DATE(created_at) = ? AND action = 'force_logout'
+                ORDER BY created_at DESC LIMIT 1
+            ");
+            $stmt->execute([$employee['id'], $date]);
+            $forceLogout = $stmt->fetch();
+
+            if ($forceLogout) {
+                sendError('Your session has been terminated by admin. Please login again.', 403);
+            }
+
             // Find the most recent check-in without a check-out for today
             $stmt = $pdo->prepare("
-                SELECT * FROM attendance 
-                WHERE employee_id = ? AND date = ? 
-                AND check_in_latitude IS NOT NULL 
+                SELECT * FROM attendance
+                WHERE employee_id = ? AND date = ?
+                AND check_in_latitude IS NOT NULL
                 AND check_out_latitude IS NULL
                 ORDER BY created_at DESC
                 LIMIT 1
             ");
             $stmt->execute([$employee['id'], $date]);
             $existing = $stmt->fetch();
-            
+
             if (!$existing) {
                 sendError('No active check-in found. Please check in first.', 400);
             }

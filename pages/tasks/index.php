@@ -2,14 +2,22 @@
 require_once '../../config/database.php';
 require_once '../../includes/session.php';
 require_once '../../includes/functions.php';
+require_once '../../includes/admin_helpers.php';
 
 requireLogin();
+
+// Check if user has admin permission to view tasks
+if (!hasAdminPermission('tasks.view')) {
+    header('Location: ../../index.php?error=access_denied');
+    exit;
+}
 
 $pageTitle = 'Tasks Management';
 $message = '';
 
 // Get filter parameters
 $date_filter = $_GET['date'] ?? date('Y-m-d');
+$task_id_filter = $_GET['task_id'] ?? '';
 $employee_filter = $_GET['employee'] ?? '';
 $status_filter = $_GET['status'] ?? '';
 $site_filter = $_GET['site'] ?? '';
@@ -38,11 +46,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                 // Delete associated files
                 foreach ($task_files as $file_info) {
                     if ($file_info['task_image']) {
-                        $file_path = '../../assets/images/uploads/tasks/' . $file_info['task_image'];
+                        $file_path = '../../uploads/tasks/' . $file_info['task_image'];
                         if (file_exists($file_path)) unlink($file_path);
                     }
                     if ($file_info['completion_image']) {
-                        $file_path = '../../assets/images/uploads/tasks/' . $file_info['completion_image'];
+                        $file_path = '../../uploads/tasks/' . $file_info['completion_image'];
                         if (file_exists($file_path)) unlink($file_path);
                     }
                 }
@@ -61,14 +69,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
             try {
                 $new_status = $action === 'complete' ? 'completed' : 'cancelled';
                 $stmt = $pdo->prepare("
-                    UPDATE tasks 
-                    SET status = ?, end_time = NOW() 
+                    UPDATE tasks
+                    SET status = ?, completed_at = NOW(), updated_at = NOW()
                     WHERE id = ?
                 ");
                 $stmt->execute([$new_status, $task_id]);
                 $message = '<div class="alert alert-success">Task ' . $new_status . ' successfully!</div>';
             } catch (PDOException $e) {
-                $message = '<div class="alert alert-error">Error updating task status.</div>';
+                $message = '<div class="alert alert-error">Error updating task status: ' . $e->getMessage() . '</div>';
+                error_log("Task status update error in tasks/index.php: " . $e->getMessage());
             }
         } elseif ($action === 'delete' && hasPermission('superadmin')) {
             try {
@@ -84,11 +93,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                 // Delete associated files
                 if ($task_files) {
                     if ($task_files['task_image']) {
-                        $file_path = '../../assets/images/uploads/tasks/' . $task_files['task_image'];
+                        $file_path = '../../uploads/tasks/' . $task_files['task_image'];
                         if (file_exists($file_path)) unlink($file_path);
                     }
                     if ($task_files['completion_image']) {
-                        $file_path = '../../assets/images/uploads/tasks/' . $task_files['completion_image'];
+                        $file_path = '../../uploads/tasks/' . $task_files['completion_image'];
                         if (file_exists($file_path)) unlink($file_path);
                     }
                 }
@@ -110,8 +119,13 @@ if (!empty($date_filter)) {
     $params[] = $date_filter;
 }
 
+if (!empty($task_id_filter)) {
+    $where_conditions[] = 't.task_identifier LIKE ?';
+    $params[] = '%' . $task_id_filter . '%';
+}
+
 if (!empty($employee_filter)) {
-    $where_conditions[] = 'e.id = ?';
+    $where_conditions[] = 't.assigned_to_employee_id = ?';
     $params[] = $employee_filter;
 }
 
@@ -126,41 +140,36 @@ if (!empty($site_filter)) {
 }
 
 try {
-    // Get tasks with employee and site info (including admin-created tasks)
+    // Get tasks with employee and site info from unified table
     $sql = "
         SELECT t.*,
-               CASE
-                   WHEN t.admin_created = 1 THEN 'Admin Assigned'
-                   ELSE COALESCE(e.name, 'Unknown Employee')
-               END as employee_name,
-               CASE
-                   WHEN t.admin_created = 1 THEN 'ADMIN'
-                   ELSE COALESCE(e.employee_code, 'N/A')
-               END as employee_code,
+               COALESCE(e.name, 'Unknown Employee') as employee_name,
+               COALESCE(e.employee_code, 'N/A') as employee_code,
                COALESCE(s.name, 'No Site') as site_name,
                CASE
-                   WHEN t.admin_created = 1 THEN NULL
-                   ELSE TIMESTAMPDIFF(MINUTE, t.start_time, COALESCE(t.end_time, NOW()))
+                   WHEN t.task_type = 'self_created' AND t.started_at IS NOT NULL THEN
+                       TIMESTAMPDIFF(MINUTE, t.started_at, COALESCE(t.completed_at, NOW()))
+                   ELSE NULL
                END as duration_minutes,
                CASE
-                   WHEN t.admin_created = 1 THEN 'admin'
+                   WHEN t.task_type = 'admin_assigned' THEN 'admin'
                    ELSE 'field'
                END as task_type,
                CASE
-                   WHEN t.admin_created = 1 THEN
-                       (SELECT COUNT(*) FROM task_assignments ta WHERE ta.task_id = t.id)
+                   WHEN t.task_type = 'admin_assigned' THEN
+                       (SELECT COUNT(*) FROM tasks t2 WHERE t2.title = t.title AND t2.task_type = 'admin_assigned' AND t2.assigned_by_user_id = t.assigned_by_user_id)
                    ELSE 1
                END as assignment_count,
                CASE
-                   WHEN t.admin_created = 1 THEN
-                       (SELECT COUNT(*) FROM task_assignments ta WHERE ta.task_id = t.id AND ta.status = 'completed')
+                   WHEN t.task_type = 'admin_assigned' THEN
+                       (SELECT COUNT(*) FROM tasks t2 WHERE t2.title = t.title AND t2.task_type = 'admin_assigned' AND t2.assigned_by_user_id = t.assigned_by_user_id AND t2.status = 'completed')
                    ELSE (CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END)
                END as completed_count,
                ab.username as assigned_by_username
         FROM tasks t
-        LEFT JOIN employees e ON t.employee_id = e.id
+        LEFT JOIN employees e ON t.assigned_to_employee_id = e.id
         LEFT JOIN sites s ON t.site_id = s.id
-        LEFT JOIN users ab ON t.assigned_by = ab.id
+        LEFT JOIN users ab ON t.assigned_by_user_id = ab.id
         WHERE " . implode(' AND ', $where_conditions) . "
         ORDER BY t.created_at DESC
         LIMIT 100
@@ -224,10 +233,17 @@ try {
                         <form method="GET" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: end;">
                             <div>
                                 <label for="date">Date:</label>
-                                <input type="date" id="date" name="date" class="form-control" 
+                                <input type="date" id="date" name="date" class="form-control"
                                        value="<?php echo htmlspecialchars($date_filter); ?>">
                             </div>
-                            
+
+                            <div>
+                                <label for="task_id">Task ID:</label>
+                                <input type="text" id="task_id" name="task_id" class="form-control"
+                                       placeholder="e.g., VTKRAN0001"
+                                       value="<?php echo htmlspecialchars($_GET['task_id'] ?? ''); ?>">
+                            </div>
+
                             <div>
                                 <label for="employee">Employee:</label>
                                 <select id="employee" name="employee" class="form-control">
@@ -327,16 +343,16 @@ try {
                                                        style="transform: scale(1.2);">
                                             </th>
                                             <?php endif; ?>
+                                            <th>Task ID</th>
                                             <th>Employee/Assigned</th>
-                                            <th>Task</th>
+                                            <th style="width: 450px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Task Information&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</th>
                                             <th>Site</th>
                                             <th>Created/Start Time</th>
-                                            <th>Duration/Assignments</th>
                                             <th>Status</th>
                                             <th>Start Location</th>
                                             <th>End Location</th>
-                                            <th>Start Image</th>
-                                            <th>Complete Image</th>
+                                            <th>Initial Document</th>
+                                            <th>Final Document</th>
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
@@ -351,25 +367,60 @@ try {
                                             </td>
                                             <?php endif; ?>
                                             <td>
-                                                <strong><?php echo htmlspecialchars($task['employee_code']); ?></strong><br>
-                                                <small><?php echo htmlspecialchars($task['employee_name']); ?></small>
+                                                <div style="min-width: 120px;">
+                                                    <?php if (!empty($task['task_identifier'])): ?>
+                                                        <span style="font-family: 'Courier New', monospace; font-weight: 600; font-size: 0.875rem; color: #d97706; background: #fef3c7; padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid #f3e8ab; display: inline-block;">
+                                                            MGR-<?php echo htmlspecialchars($task['task_identifier']); ?>
+                                                        </span>
+                                                    <?php else: ?>
+                                                        <span style="font-size: 0.75rem; color: #9ca3af; font-style: italic;">No ID</span>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($task['site_name'])): ?>
+                                                        <br><small style="font-size: 0.75rem; color: #6b7280; display: flex; align-items: center; gap: 0.25rem; margin-top: 0.25rem;">
+                                                            <i class="fas fa-map-marker-alt" style="font-size: 0.65rem;"></i>
+                                                            <?php echo htmlspecialchars($task['site_name']); ?>
+                                                        </small>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span style="color: #3b82f6; font-weight: 600;"><?php echo htmlspecialchars($task['employee_code']); ?></span>
+                                                <span style="color: #1f2937; font-weight: 500;"><?php echo htmlspecialchars($task['employee_name']); ?></span>
                                                 <?php if ($task['task_type'] === 'admin'): ?>
                                                     <?php if ($task['assigned_by_username']): ?>
-                                                        <br><small style="color: #666;">By: <?php echo htmlspecialchars($task['assigned_by_username']); ?></small>
+                                                        <br><small style="font-style: italic; color: #6b7280;">By:</small> <small style="color: #059669; font-weight: 500;"><?php echo htmlspecialchars($task['assigned_by_username']); ?></small>
                                                     <?php endif; ?>
                                                 <?php endif; ?>
                                             </td>
                                             <td>
-                                                <div style="max-width: 200px;">
+                                                <div style="width: 100%; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; background: #f9fafb;">
                                                     <strong><?php echo htmlspecialchars($task['title']); ?></strong>
                                                     <?php if ($task['description']): ?>
-                                                        <br><small style="color: #666;"><?php echo htmlspecialchars(substr($task['description'], 0, 50)); ?><?php echo strlen($task['description']) > 50 ? '...' : ''; ?></small>
+                                                        <br><small style="color: #6b7280;"><?php echo htmlspecialchars(substr($task['description'], 0, 50)); ?><?php echo strlen($task['description']) > 50 ? '...' : ''; ?></small>
                                                     <?php endif; ?>
-                                                    <?php if ($task['task_type'] === 'admin' && $task['priority']): ?>
-                                                        <br><small style="color: #666;">Priority: <?php echo ucfirst($task['priority']); ?></small>
+
+                                                    <?php if ($task['task_type'] === 'admin' && ($task['start_date'] || $task['due_date'])): ?>
+                                                        <br><small>
+                                                            <?php if ($task['start_date']): ?>
+                                                                <span style="color: #3b82f6; font-weight: 500;">Start: <?php echo formatDate($task['start_date'], 'M d, Y'); ?></span>
+                                                            <?php endif; ?>
+                                                            <?php if ($task['start_date'] && $task['due_date']): ?> | <?php endif; ?>
+                                                            <?php if ($task['due_date']): ?>
+                                                                <span style="color: #ef4444; font-weight: 500;">End: <?php echo formatDate($task['due_date'], 'M d, Y'); ?></span>
+                                                            <?php endif; ?>
+                                                        </small>
                                                     <?php endif; ?>
-                                                    <?php if ($task['task_type'] === 'admin' && $task['due_date']): ?>
-                                                        <br><small style="color: #666;">Due: <?php echo formatDate($task['due_date'], 'M d, Y'); ?></small>
+
+                                                    <?php if ($task['task_type'] === 'admin' && ($task['priority'] || ($task['expense_required'] && $task['budget_amount']))): ?>
+                                                        <br><small>
+                                                            <?php if ($task['priority']): ?>
+                                                                <span style="color: <?php echo $task['priority'] === 'high' ? '#dc2626' : ($task['priority'] === 'medium' ? '#f59e0b' : '#059669'); ?>; font-weight: 500;">Priority: <?php echo ucfirst($task['priority']); ?></span>
+                                                            <?php endif; ?>
+                                                            <?php if ($task['priority'] && $task['expense_required'] && $task['budget_amount']): ?> | <?php endif; ?>
+                                                            <?php if ($task['expense_required'] && $task['budget_amount']): ?>
+                                                                <span style="color: #059669; font-weight: 600;">Budget: ₹<?php echo number_format($task['budget_amount'], 2); ?></span>
+                                                            <?php endif; ?>
+                                                        </small>
                                                     <?php endif; ?>
                                                 </div>
                                             </td>
@@ -384,24 +435,6 @@ try {
                                                 <?php endif; ?>
                                             </td>
                                             <td>
-                                                <?php if ($task['task_type'] === 'admin'): ?>
-                                                    <strong>
-                                                        <a href="#" onclick="showAssignments(<?php echo $task['id']; ?>); return false;"
-                                                           style="color: #007bff; text-decoration: none; cursor: pointer;">
-                                                            <?php echo $task['assignment_count']; ?> assigned
-                                                        </a>
-                                                    </strong><br>
-                                                    <small><?php echo $task['completed_count']; ?> completed</small>
-                                                <?php else: ?>
-                                                    <?php
-                                                    $hours = floor($task['duration_minutes'] / 60);
-                                                    $minutes = $task['duration_minutes'] % 60;
-                                                    echo $hours > 0 ? $hours . 'h ' : '';
-                                                    echo $minutes . 'm';
-                                                    ?>
-                                                <?php endif; ?>
-                                            </td>
-                                            <td>
                                                 <span class="badge badge-<?php 
                                                     echo $task['status'] === 'completed' ? 'success' : 
                                                         ($task['status'] === 'cancelled' ? 'danger' : 'warning'); ?>">
@@ -411,9 +444,9 @@ try {
                                             
                                             <!-- START LOCATION COLUMN -->
                                             <td>
-                                                <?php if ($task['latitude'] && $task['longitude']): ?>
-                                                    <a href="#" 
-                                                       onclick="showLocationModal(<?php echo $task['latitude']; ?>, <?php echo $task['longitude']; ?>, '<?php echo htmlspecialchars($task['title']); ?>', '<?php echo formatDate($task['start_time'], 'M d, Y g:i A'); ?>')" 
+                                                <?php if ($task['start_latitude'] && $task['start_longitude']): ?>
+                                                    <a href="#"
+                                                       onclick="showLocationModal(<?php echo $task['start_latitude']; ?>, <?php echo $task['start_longitude']; ?>, '<?php echo htmlspecialchars($task['title']); ?>', '<?php echo formatDate($task['created_at'], 'M d, Y g:i A'); ?>')"
                                                        class="btn" style="background: #28a745; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
                                                         <i class="fas fa-map-marker-alt"></i> View on Map
                                                     </a>
@@ -425,8 +458,8 @@ try {
                                             <!-- END LOCATION COLUMN -->
                                             <td>
                                                 <?php if ($task['completion_latitude'] && $task['completion_longitude']): ?>
-                                                    <a href="#" 
-                                                       onclick="showLocationModal(<?php echo $task['completion_latitude']; ?>, <?php echo $task['completion_longitude']; ?>, '<?php echo htmlspecialchars($task['title']); ?> - End', '<?php echo $task['end_time'] ? formatDate($task['end_time'], 'M d, Y g:i A') : 'Task completed'; ?>')" 
+                                                    <a href="#"
+                                                       onclick="showLocationModal(<?php echo $task['completion_latitude']; ?>, <?php echo $task['completion_longitude']; ?>, '<?php echo htmlspecialchars($task['title']); ?> - End', '<?php echo $task['completed_at'] ? formatDate($task['completed_at'], 'M d, Y g:i A') : 'Task completed'; ?>')"
                                                        class="btn" style="background: #dc3545; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
                                                         <i class="fas fa-map-marker-alt"></i> View on Map
                                                     </a>
@@ -441,54 +474,55 @@ try {
                                             
                                             <!-- START IMAGE COLUMN -->
                                             <td>
-                                                <?php if ($task['task_type'] === 'admin'): ?>
-                                                    <span style="color: #666; font-size: 0.8rem;">Admin Task</span>
+                                                <?php if ($task['task_image']): ?>
+                                                    <a href="../../uploads/tasks/<?php echo $task['task_image']; ?>"
+                                                       target="_blank" class="btn" style="background: #28a745; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                                                        <i class="fas fa-file-alt"></i> Initial
+                                                    </a>
                                                 <?php else: ?>
-                                                    <?php if ($task['task_image']): ?>
-                                                        <a href="../../assets/images/uploads/tasks/<?php echo $task['task_image']; ?>"
-                                                           target="_blank" class="btn" style="background: #28a745; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
-                                                            <i class="fas fa-image"></i> Start
-                                                        </a>
-                                                    <?php else: ?>
-                                                        <span style="color: #666; font-size: 0.8rem;">No start image</span>
-                                                    <?php endif; ?>
+                                                    <span style="color: #666; font-size: 0.8rem;">Not Available</span>
                                                 <?php endif; ?>
                                             </td>
 
                                             <!-- COMPLETE IMAGE COLUMN -->
                                             <td>
-                                                <?php if ($task['task_type'] === 'admin'): ?>
-                                                    <span style="color: #666; font-size: 0.8rem;">Admin Task</span>
+                                                <?php if ($task['completion_image']): ?>
+                                                    <a href="../../uploads/tasks/<?php echo $task['completion_image']; ?>"
+                                                       target="_blank" class="btn" style="background: #007bff; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                                                        <i class="fas fa-file-check"></i> Final
+                                                    </a>
                                                 <?php else: ?>
-                                                    <?php if ($task['completion_image']): ?>
-                                                        <a href="../../assets/images/uploads/tasks/<?php echo $task['completion_image']; ?>"
-                                                           target="_blank" class="btn" style="background: #007bff; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
-                                                            <i class="fas fa-image"></i> Complete
-                                                        </a>
-                                                    <?php else: ?>
-                                                        <?php if ($task['status'] === 'completed'): ?>
-                                                            <span style="color: #666; font-size: 0.8rem;">No complete image</span>
-                                                        <?php else: ?>
-                                                            <span style="color: #666; font-size: 0.8rem;">Task not completed</span>
-                                                        <?php endif; ?>
-                                                    <?php endif; ?>
+                                                    <span style="color: #666; font-size: 0.8rem;">Not Available</span>
                                                 <?php endif; ?>
                                             </td>
                                             
                                             <td>
                                                 <?php if ($task['task_type'] === 'admin'): ?>
                                                     <!-- Admin Task Actions -->
-                                                    <?php if (hasPermission('superadmin')): ?>
-                                                    <form method="POST" style="display: inline;">
-                                                        <input type="hidden" name="task_id" value="<?php echo $task['id']; ?>">
-                                                        <input type="hidden" name="action" value="delete">
-                                                        <button type="submit" class="btn"
-                                                                style="background: #e74c3c; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                                                                onclick="return confirm('Are you sure you want to delete this admin task? This action cannot be undone.')">
-                                                            <i class="fas fa-trash"></i>
+                                                    <div style="display: flex; gap: 0.25rem;">
+                                                        <!-- Edit Button -->
+                                                        <?php if (hasPermission('supervisor')): ?>
+                                                        <button onclick="editTask(<?php echo $task['id']; ?>)" class="btn"
+                                                                style="background: #f39c12; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                                                            <i class="fas fa-edit"></i>
                                                         </button>
-                                                    </form>
-                                                    <?php else: ?>
+                                                        <?php endif; ?>
+
+                                                        <!-- Delete Button -->
+                                                        <?php if (hasPermission('superadmin')): ?>
+                                                        <form method="POST" style="display: inline;">
+                                                            <input type="hidden" name="task_id" value="<?php echo $task['id']; ?>">
+                                                            <input type="hidden" name="action" value="delete">
+                                                            <button type="submit" class="btn"
+                                                                    style="background: #e74c3c; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                                                                    onclick="return confirm('Are you sure you want to delete this admin task? This action cannot be undone.')">
+                                                                <i class="fas fa-trash"></i>
+                                                            </button>
+                                                        </form>
+                                                        <?php endif; ?>
+                                                    </div>
+
+                                                    <?php if (!hasPermission('supervisor') && !hasPermission('superadmin')): ?>
                                                         <span style="color: #666; font-size: 0.8rem;">Admin Task</span>
                                                     <?php endif; ?>
                                                 <?php elseif ($task['status'] === 'active' && hasPermission('supervisor')): ?>
@@ -792,6 +826,31 @@ try {
 
     function closeAssignmentsModal() {
         document.getElementById('assignmentsModal').style.display = 'none';
+    }
+
+    function editTask(taskId) {
+        // Open edit task popup window
+        const popupUrl = 'edit_task_popup.php?task_id=' + taskId;
+        const popup = window.open(
+            popupUrl,
+            'editTask',
+            'width=600,height=700,scrollbars=yes,resizable=yes,location=no,menubar=no,toolbar=no,status=no'
+        );
+
+        // Center the popup
+        if (popup) {
+            const left = (screen.width - 600) / 2;
+            const top = (screen.height - 700) / 2;
+            popup.moveTo(left, top);
+
+            // Refresh parent window when popup is closed
+            const checkClosed = setInterval(() => {
+                if (popup.closed) {
+                    clearInterval(checkClosed);
+                    location.reload(); // Refresh the tasks list
+                }
+            }, 1000);
+        }
     }
     </script>
 </body>

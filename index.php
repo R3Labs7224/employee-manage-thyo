@@ -27,21 +27,6 @@ try {
     // Handle error silently for now
 }
 
-// Get pending petty cash requests
-$pendingRequests = [];
-try {
-    $stmt = $pdo->query("
-        SELECT p.*, e.name as employee_name 
-        FROM petty_cash_requests p 
-        JOIN employees e ON p.employee_id = e.id 
-        WHERE p.status = 'pending' 
-        ORDER BY p.created_at DESC 
-        LIMIT 5
-    ");
-    $pendingRequests = $stmt->fetchAll();
-} catch (PDOException $e) {
-    // Handle error silently for now
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -108,7 +93,7 @@ try {
                 </div>
                 
                 <!-- Recent Activity -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                <div>
                     <!-- Recent Attendance -->
                     <div class="card">
                         <div class="card-header">
@@ -133,45 +118,13 @@ try {
                                             <td><?php echo htmlspecialchars($attendance['employee_name']); ?></td>
                                             <td><?php echo formatDate($attendance['date'], 'M d, Y'); ?></td>
                                             <td>
-                                                <span class="badge badge-<?php 
-                                                    echo $attendance['status'] === 'approved' ? 'success' : 
-                                                        ($attendance['status'] === 'rejected' ? 'danger' : 'warning'); 
+                                                <span class="badge badge-<?php
+                                                    echo $attendance['status'] === 'approved' ? 'success' :
+                                                        ($attendance['status'] === 'rejected' ? 'danger' : 'warning');
                                                 ?>">
                                                     <?php echo ucfirst($attendance['status']); ?>
                                                 </span>
                                             </td>
-                                        </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    
-                    <!-- Pending Petty Cash Requests -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h3>Pending Requests</h3>
-                            <a href="pages/petty_cash/index.php" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.9rem;">View All</a>
-                        </div>
-                        <div class="card-body">
-                            <?php if (empty($pendingRequests)): ?>
-                                <p style="text-align: center; color: #666; padding: 2rem;">No pending requests</p>
-                            <?php else: ?>
-                                <table class="table">
-                                    <thead>
-                                        <tr>
-                                            <th>Employee</th>
-                                            <th>Amount</th>
-                                            <th>Date</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php foreach ($pendingRequests as $request): ?>
-                                        <tr>
-                                            <td><?php echo htmlspecialchars($request['employee_name']); ?></td>
-                                            <td><?php echo formatCurrency($request['amount']); ?></td>
-                                            <td><?php echo formatDate($request['request_date'], 'M d, Y'); ?></td>
                                         </tr>
                                         <?php endforeach; ?>
                                     </tbody>

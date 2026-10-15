@@ -29,8 +29,8 @@ switch ($method) {
 function getEmployeeProfile($pdo, $employee) {
     try {
         $stmt = $pdo->prepare("
-            SELECT e.id, e.employee_code, e.name, e.email, e.phone, 
-                   e.basic_salary, e.daily_wage, e.joining_date,
+            SELECT e.id, e.employee_code, e.name, e.email, e.contact_number as phone,
+                   e.basic_salary, e.daily_wage, e.joining_date, e.photograph,
                    d.name as department_name,
                    s.name as shift_name, s.start_time, s.end_time,
                    st.name as site_name, st.address as site_address
@@ -61,13 +61,13 @@ function getEmployeeProfile($pdo, $employee) {
         $stmt->execute([$employee['id']]);
         $attendance_stats = $stmt->fetch();
         
-        // Get petty cash stats for current month
+        // Get expense stats for current month
         $stmt = $pdo->prepare("
-            SELECT 
+            SELECT
                 COUNT(*) as total_requests,
                 SUM(CASE WHEN status = 'approved' THEN amount ELSE 0 END) as approved_amount,
                 SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END) as pending_amount
-            FROM petty_cash_requests 
+            FROM expenses
             WHERE employee_id = ? AND MONTH(request_date) = MONTH(CURDATE()) AND YEAR(request_date) = YEAR(CURDATE())
         ");
         
@@ -87,16 +87,16 @@ function getEmployeeProfile($pdo, $employee) {
 
 function updateEmployeeProfile($pdo, $employee) {
     $input = json_decode(file_get_contents('php://input'), true);
-    
+
     // Only allow updating certain fields
-    $allowed_fields = ['email', 'phone'];
+    $allowed_fields = ['email' => 'email', 'phone' => 'contact_number'];
     $updates = [];
     $params = [];
-    
-    foreach ($allowed_fields as $field) {
-        if (isset($input[$field])) {
-            $updates[] = "$field = ?";
-            $params[] = trim($input[$field]);
+
+    foreach ($allowed_fields as $input_field => $db_field) {
+        if (isset($input[$input_field])) {
+            $updates[] = "$db_field = ?";
+            $params[] = trim($input[$input_field]);
         }
     }
     

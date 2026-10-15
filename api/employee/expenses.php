@@ -135,17 +135,13 @@ function createExpenseRequest($pdo, $employee) {
         sendError('Invalid category selected', 400);
     }
 
-    // Validate task if provided (must belong to employee or be assigned to them)
+    // Validate task if provided (must be assigned to employee in unified tasks table)
     if ($task_id) {
         $task_stmt = $pdo->prepare("
-            SELECT t.id FROM tasks t
-            LEFT JOIN task_assignments ta ON t.id = ta.task_id
-            WHERE t.id = ? AND (
-                t.employee_id = ? OR
-                (t.admin_created = 1 AND ta.assigned_to = ?)
-            )
+            SELECT id FROM tasks
+            WHERE id = ? AND assigned_to_employee_id = ?
         ");
-        $task_stmt->execute([$task_id, $employee['id'], $employee['id']]);
+        $task_stmt->execute([$task_id, $employee['id']]);
         if (!$task_stmt->fetch()) {
             sendError('Invalid task selected or task not assigned to you', 400);
         }
@@ -155,7 +151,14 @@ function createExpenseRequest($pdo, $employee) {
         // Handle receipt image upload
         $receipt_filename = null;
         if (isset($input['receipt_image']) && !empty($input['receipt_image'])) {
-            $receipt_filename = uploadBase64Image($input['receipt_image'], '../../assets/images/uploads/expenses/');
+            try {
+                $receipt_filename = uploadBase64Image($input['receipt_image'], '../../assets/images/uploads/expenses/');
+                error_log("Receipt image uploaded successfully: $receipt_filename");
+            } catch (Exception $e) {
+                error_log("Receipt image upload failed: " . $e->getMessage());
+                sendError('Failed to upload receipt image: ' . $e->getMessage(), 400);
+                return;
+            }
         }
 
         // Create new expense request
@@ -181,28 +184,95 @@ function createExpenseRequest($pdo, $employee) {
 }
 
 function uploadBase64Image($base64_string, $upload_dir) {
-    // Remove data:image/jpeg;base64, prefix if present
-    if (strpos($base64_string, 'data:image') === 0) {
-        $base64_string = substr($base64_string, strpos($base64_string, ',') + 1);
-    }
-    
-    $image_data = base64_decode($base64_string);
-    if ($image_data === false) {
-        return null;
-    }
-    
-    // Create directory if it doesn't exist
-    if (!file_exists($upload_dir)) {
-        mkdir($upload_dir, 0755, true);
-    }
-    
-    $filename = uniqid() . '.jpg';
-    $file_path = $upload_dir . $filename;
-    
-    if (file_put_contents($file_path, $image_data)) {
+    try {
+        if (empty($base64_string)) {
+            throw new Exception('Empty base64 string provided');
+        }
+
+        error_log("Starting receipt image upload to directory: $upload_dir");
+
+        // Remove data:image/jpeg;base64, prefix if present
+        if (strpos($base64_string, 'data:image') === 0) {
+            $comma_pos = strpos($base64_string, ',');
+            if ($comma_pos === false) {
+                throw new Exception('Invalid base64 format - missing comma separator');
+            }
+            $base64_string = substr($base64_string, $comma_pos + 1);
+        }
+
+        // Decode base64
+        $image_data = base64_decode($base64_string, true);
+        if ($image_data === false) {
+            throw new Exception('Invalid base64 image data - decode failed');
+        }
+
+        $image_size = strlen($image_data);
+        error_log("Decoded receipt image size: $image_size bytes");
+
+        // Validate image size (max 10MB)
+        if ($image_size > 10 * 1024 * 1024) {
+            throw new Exception('Image too large - maximum 10MB allowed');
+        }
+
+        if ($image_size < 100) {
+            throw new Exception('Image too small - minimum 100 bytes required');
+        }
+
+        // Get absolute path
+        $abs_upload_dir = realpath(dirname(__FILE__)) . '/' . $upload_dir;
+        error_log("Absolute upload directory: $abs_upload_dir");
+
+        // Create directory if it doesn't exist
+        if (!file_exists($abs_upload_dir)) {
+            error_log("Creating directory: $abs_upload_dir");
+            if (!mkdir($abs_upload_dir, 0755, true)) {
+                throw new Exception('Failed to create upload directory: ' . $abs_upload_dir);
+            }
+        }
+
+        // Check if directory is writable
+        if (!is_writable($abs_upload_dir)) {
+            error_log("Directory not writable, attempting to fix permissions: $abs_upload_dir");
+            if (!chmod($abs_upload_dir, 0755)) {
+                throw new Exception('Upload directory is not writable and cannot fix permissions: ' . $abs_upload_dir);
+            }
+        }
+
+        // Generate unique filename
+        $filename = 'expense_receipt_' . uniqid() . '_' . time() . '.jpg';
+        $file_path = $abs_upload_dir . '/' . $filename;
+
+        error_log("Writing receipt image to: $file_path");
+
+        // Write the file
+        $bytes_written = file_put_contents($file_path, $image_data);
+        if ($bytes_written === false) {
+            throw new Exception('Failed to write image file: ' . $file_path);
+        }
+
+        error_log("Receipt image written successfully. Bytes: $bytes_written");
+
+        // Verify the file was created and has correct size
+        if (!file_exists($file_path)) {
+            throw new Exception('Image file was not created successfully');
+        }
+
+        $actual_file_size = filesize($file_path);
+        if ($actual_file_size !== $image_size) {
+            error_log("Size mismatch: expected $image_size, got $actual_file_size");
+            unlink($file_path); // Clean up
+            throw new Exception('Image file size verification failed');
+        }
+
+        // Set proper permissions
+        chmod($file_path, 0644);
+
+        error_log("Receipt image upload completed successfully: $filename");
         return $filename;
+
+    } catch (Exception $e) {
+        error_log("Receipt image upload error: " . $e->getMessage());
+        throw $e;
     }
-    
-    return null;
 }
 ?>

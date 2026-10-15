@@ -71,10 +71,10 @@ function getLeaveRequests($pdo, $employee) {
         $count_stmt->execute($params);
         $total = (int)$count_stmt->fetchColumn();
         
-        // Get leave requests with approver details - FIXED QUERY
+        // Get Leave Request with approver details - FIXED QUERY
         // Using string concatenation for LIMIT/OFFSET to avoid PDO quoting issues
         $sql = "
-            SELECT lr.id, lr.start_date, lr.end_date, lr.leave_type, lr.reason, 
+            SELECT lr.id, lr.start_date, lr.end_date, lr.leave_type, lr.reason, lr.attachment_path,
                    lr.total_days, lr.status, lr.created_at, lr.updated_at,
                    lr.l1_approved_by, lr.l1_approval_date, lr.l1_comments,
                    lr.l2_approved_by, lr.l2_approval_date, lr.l2_comments,
@@ -104,6 +104,7 @@ function getLeaveRequests($pdo, $employee) {
                 'end_date' => $request['end_date'],
                 'leave_type' => $request['leave_type'],
                 'reason' => $request['reason'],
+                'attachment_path' => $request['attachment_path'],
                 'total_days' => (int)$request['total_days'],
                 'status' => $request['status'],
                 'status_display' => getStatusDisplay($request['status']),
@@ -130,7 +131,7 @@ function getLeaveRequests($pdo, $employee) {
         // Prepare pagination info
         $has_more = ($offset + $limit) < $total;
         
-        sendSuccess('Leave requests fetched successfully', [
+        sendSuccess('Leave Request fetched successfully', [
             'requests' => $formatted_requests,
             'pagination' => [
                 'total' => $total,
@@ -142,29 +143,50 @@ function getLeaveRequests($pdo, $employee) {
         ]);
         
     } catch (PDOException $e) {
-        error_log("Get leave requests error: " . $e->getMessage());
-        sendError('Failed to fetch leave requests', 500);
+        error_log("Get Leave Request error: " . $e->getMessage());
+        sendError('Failed to fetch Leave Request', 500);
     } catch (Exception $e) {
-        error_log("Get leave requests error: " . $e->getMessage());
-        sendError('An error occurred while fetching leave requests', 500);
+        error_log("Get Leave Request error: " . $e->getMessage());
+        sendError('An error occurred while fetching Leave Request', 500);
     }
 }
 
 function createLeaveRequest($pdo, $employee) {
     try {
-        // Get and validate JSON input
-        $input = json_decode(file_get_contents('php://input'), true);
-        
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            sendError('Invalid JSON data provided', 400);
-            return;
+        // Check if request has files (multipart) or JSON data
+        $attachment_path = null;
+
+        if (!empty($_FILES) && isset($_FILES['attachment'])) {
+            // Handle multipart form data with file upload
+            $start_date = trim($_POST['start_date'] ?? '');
+            $end_date = trim($_POST['end_date'] ?? '');
+            $leave_type = trim($_POST['leave_type'] ?? '');
+            $reason = trim($_POST['reason'] ?? '');
+
+            // Handle file upload
+            $upload_result = handleFileUpload($_FILES['attachment'], $employee['id']);
+            if ($upload_result['success']) {
+                $attachment_path = $upload_result['path'];
+            } else {
+                sendError($upload_result['error'], 400);
+                return;
+            }
+        } else {
+            // Handle JSON input (existing functionality)
+            $input = json_decode(file_get_contents('php://input'), true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                sendError('Invalid JSON data provided', 400);
+                return;
+            }
+
+            $start_date = trim($input['start_date'] ?? '');
+            $end_date = trim($input['end_date'] ?? '');
+            $leave_type = trim($input['leave_type'] ?? '');
+            $reason = trim($input['reason'] ?? '');
         }
-        
+
         // Validate required fields
-        $start_date = trim($input['start_date'] ?? '');
-        $end_date = trim($input['end_date'] ?? '');
-        $leave_type = trim($input['leave_type'] ?? '');
-        $reason = trim($input['reason'] ?? '');
         
         if (empty($start_date)) {
             sendError('Start date is required', 400);
@@ -268,17 +290,18 @@ function createLeaveRequest($pdo, $employee) {
             // Create leave request
             $stmt = $pdo->prepare("
                 INSERT INTO leave_requests (
-                    employee_id, start_date, end_date, leave_type, 
-                    reason, total_days, status, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())
+                    employee_id, start_date, end_date, leave_type,
+                    reason, attachment_path, total_days, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())
             ");
-            
+
             $stmt->execute([
                 $employee['id'],
                 $start_date,
                 $end_date,
                 $leave_type,
                 $reason,
+                $attachment_path,
                 $total_days
             ]);
             
@@ -304,7 +327,7 @@ function createLeaveRequest($pdo, $employee) {
             
             // Get the created request with full details
             $created_stmt = $pdo->prepare("
-                SELECT lr.id, lr.start_date, lr.end_date, lr.leave_type, lr.reason, 
+                SELECT lr.id, lr.start_date, lr.end_date, lr.leave_type, lr.reason, lr.attachment_path,
                        lr.total_days, lr.status, lr.created_at, lr.updated_at,
                        e.name as employee_name, e.employee_code
                 FROM leave_requests lr
@@ -326,6 +349,7 @@ function createLeaveRequest($pdo, $employee) {
                     'end_date' => $created_request['end_date'],
                     'leave_type' => $created_request['leave_type'],
                     'reason' => $created_request['reason'],
+                    'attachment_path' => $created_request['attachment_path'],
                     'total_days' => (int)$created_request['total_days'],
                     'status' => $created_request['status'],
                     'status_display' => getStatusDisplay($created_request['status']),
@@ -411,6 +435,81 @@ if (!function_exists('verifyEmployeeToken')) {
         }
         
         return false;
+    }
+}
+
+function handleFileUpload($file, $employee_id) {
+    // Check for upload errors
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        switch ($file['error']) {
+            case UPLOAD_ERR_INI_SIZE:
+            case UPLOAD_ERR_FORM_SIZE:
+                return ['success' => false, 'error' => 'File size exceeds limit'];
+            case UPLOAD_ERR_PARTIAL:
+                return ['success' => false, 'error' => 'File was only partially uploaded'];
+            case UPLOAD_ERR_NO_FILE:
+                return ['success' => false, 'error' => 'No file was uploaded'];
+            default:
+                return ['success' => false, 'error' => 'Upload failed'];
+        }
+    }
+
+    // Validate file size (max 5MB)
+    $max_size = 5 * 1024 * 1024; // 5MB
+    if ($file['size'] > $max_size) {
+        return ['success' => false, 'error' => 'File size exceeds 5MB limit'];
+    }
+
+    // Validate file type
+    $allowed_types = [
+        'image/jpeg', 'image/png', 'image/gif',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'text/plain'
+    ];
+
+    $file_type = mime_content_type($file['tmp_name']);
+    if (!in_array($file_type, $allowed_types)) {
+        return ['success' => false, 'error' => 'Invalid file type. Allowed: images, PDF, DOC, DOCX, TXT'];
+    }
+
+    // Generate safe filename
+    $file_extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+    $safe_filename = 'leave_' . $employee_id . '_' . time() . '_' . uniqid() . '.' . strtolower($file_extension);
+
+    // Upload directory
+    $upload_dir = '../../uploads/leave_attachments/';
+
+    // Check if directory exists, create if not
+    if (!is_dir($upload_dir)) {
+        if (!mkdir($upload_dir, 0755, true)) {
+            return ['success' => false, 'error' => 'Failed to create upload directory: ' . $upload_dir];
+        }
+    }
+
+    // Check if directory is writable
+    if (!is_writable($upload_dir)) {
+        return ['success' => false, 'error' => 'Upload directory is not writable: ' . $upload_dir];
+    }
+
+    $upload_path = $upload_dir . $safe_filename;
+
+    // Check if tmp file exists
+    if (!file_exists($file['tmp_name'])) {
+        return ['success' => false, 'error' => 'Temporary file does not exist: ' . $file['tmp_name']];
+    }
+
+    // Move uploaded file
+    if (move_uploaded_file($file['tmp_name'], $upload_path)) {
+        // Return relative path for database storage
+        return ['success' => true, 'path' => 'uploads/leave_attachments/' . $safe_filename];
+    } else {
+        $error_msg = 'Failed to move file from ' . $file['tmp_name'] . ' to ' . $upload_path;
+        if (!is_writable(dirname($upload_path))) {
+            $error_msg .= ' (directory not writable)';
+        }
+        return ['success' => false, 'error' => $error_msg];
     }
 }
 ?>

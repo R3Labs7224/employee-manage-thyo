@@ -7,6 +7,7 @@ try {
     require_once '../../config/database.php';
     require_once '../../includes/session.php';
     require_once '../../includes/functions.php';
+    require_once '../../includes/admin_helpers.php';
 } catch (Exception $e) {
     die('Error loading required files: ' . $e->getMessage());
 }
@@ -17,6 +18,12 @@ if (session_status() == PHP_SESSION_NONE) {
 }
 
 requireLogin();
+
+// Check if user has permission
+if (!hasAdminPermission('employees.edit')) {
+    header('Location: index.php?error=access_denied');
+    exit;
+}
 
 $pageTitle = 'Edit Employee';
 $message = '';
@@ -65,7 +72,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $site_id = !empty($_POST['site_id']) ? (int)$_POST['site_id'] : null;
     $basic_salary = (float)($_POST['basic_salary'] ?? 0);
     $daily_wage = (float)($_POST['daily_wage'] ?? 0);
-    $epf_number = sanitize($_POST['epf_number']);
     $joining_date = $_POST['joining_date'];
     $password = $_POST['password'] ?? '';
     
@@ -82,9 +88,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $total_experience = !empty($_POST['total_experience']) ? (float)$_POST['total_experience'] : null;
     $nationality = sanitize($_POST['nationality'] ?? '') ?: 'Indian';
     $religion = sanitize($_POST['religion'] ?? '');
-    $marital_status = $_POST['marital_status'] ?? null;
-    $gender = $_POST['gender'] ?? null;
-    $blood_group = $_POST['blood_group'] ?? null;
+    $marital_status = !empty($_POST['marital_status']) ? $_POST['marital_status'] : null;
+    $gender = !empty($_POST['gender']) ? $_POST['gender'] : null;
+    $blood_group = !empty($_POST['blood_group']) ? $_POST['blood_group'] : null;
     $current_address = sanitize($_POST['current_address'] ?? '');
     $permanent_address = sanitize($_POST['permanent_address'] ?? '');
     $last_working_day = !empty($_POST['last_working_day']) ? $_POST['last_working_day'] : null;
@@ -95,32 +101,70 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($contact_number)) $errors[] = 'Contact number is required';
     if (empty($employee_code)) $errors[] = 'Employee code is required';
     if (empty($joining_date)) $errors[] = 'Joining date is required';
+    if (empty($email)) $errors[] = 'Email is required';
     if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors[] = 'Invalid email format';
     }
+    if (!empty($password) && strlen($password) < 6) {
+        $errors[] = 'Password must be at least 6 characters long';
+    }
+    if (empty($department_id)) $errors[] = 'Department is required';
+    if (empty($designation)) $errors[] = 'Designation is required';
     
     // Handle file upload
     $photograph_path = $employee['photograph'];
     if (isset($_FILES['photograph']) && $_FILES['photograph']['error'] == 0) {
         $upload_dir = '../../uploads/employees/photos/';
-        
+
         if (!is_dir($upload_dir)) {
             mkdir($upload_dir, 0755, true);
         }
-        
+
         $file_extension = strtolower(pathinfo($_FILES['photograph']['name'], PATHINFO_EXTENSION));
         $allowed_extensions = ['jpg', 'jpeg', 'png', 'gif'];
-        
+
         if (in_array($file_extension, $allowed_extensions) && $_FILES['photograph']['size'] <= 5242880) {
             $photograph_filename = $employee_code . '_' . time() . '.' . $file_extension;
-            
+
             if (move_uploaded_file($_FILES['photograph']['tmp_name'], $upload_dir . $photograph_filename)) {
                 $photograph_path = 'uploads/employees/photos/' . $photograph_filename;
-                
+
                 // Delete old photo
                 if (!empty($employee['photograph']) && file_exists('../../' . $employee['photograph'])) {
                     unlink('../../' . $employee['photograph']);
                 }
+            }
+        }
+    }
+
+    // Handle Aadhar card upload
+    $aadhar_card_path = $employee['aadhar_card_document'] ?? null;
+    if (isset($_FILES['aadhar_card_upload']) && $_FILES['aadhar_card_upload']['error'] == 0) {
+        $upload_dir = '../../uploads/employees/documents/';
+
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0755, true);
+        }
+
+        $file_extension = strtolower(pathinfo($_FILES['aadhar_card_upload']['name'], PATHINFO_EXTENSION));
+        $allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'pdf'];
+
+        if (!in_array($file_extension, $allowed_extensions)) {
+            $errors[] = 'Only JPG, JPEG, PNG, GIF, and PDF files are allowed for Aadhar card';
+        } elseif ($_FILES['aadhar_card_upload']['size'] > 5 * 1024 * 1024) { // 5MB limit
+            $errors[] = 'Aadhar card file size must be less than 5MB';
+        } else {
+            $aadhar_filename = $employee_code . '_aadhar_' . time() . '.' . $file_extension;
+
+            if (move_uploaded_file($_FILES['aadhar_card_upload']['tmp_name'], $upload_dir . $aadhar_filename)) {
+                $aadhar_card_path = 'uploads/employees/documents/' . $aadhar_filename;
+
+                // Delete old Aadhar card document
+                if (!empty($employee['aadhar_card_document']) && file_exists('../../' . $employee['aadhar_card_document'])) {
+                    unlink('../../' . $employee['aadhar_card_document']);
+                }
+            } else {
+                $errors[] = 'Failed to upload Aadhar card';
             }
         }
     }
@@ -134,11 +178,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if ($stmt->fetch()) $errors[] = 'Employee code already exists';
             
             // Email check
-            if (!empty($email)) {
-                $stmt = $pdo->prepare("SELECT id FROM employees WHERE email = ? AND id != ?");
-                $stmt->execute([$email, $employee_id]);
-                if ($stmt->fetch()) $errors[] = 'Email already exists';
-            }
+            $stmt = $pdo->prepare("SELECT id FROM employees WHERE email = ? AND id != ?");
+            $stmt->execute([$email, $employee_id]);
+            if ($stmt->fetch()) $errors[] = 'Email already exists';
             
         } catch (PDOException $e) {
             $errors[] = 'Database error checking duplicates';
@@ -150,55 +192,57 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if (!empty($password)) {
                 $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
                 $stmt = $pdo->prepare("
-                    UPDATE employees SET 
-                        employee_code = ?, name = ?, email = ?, contact_number = ?, 
-                        department_id = ?, shift_id = ?, site_id = ?, basic_salary = ?, 
-                        daily_wage = ?, epf_number = ?, joining_date = ?, password = ?,
-                        uan_number = ?, esic_number = ?, aadhar_number = ?, pan_number = ?, 
-                        designation = ?, reporting_manager_id = ?, emergency_contact_number = ?, 
-                        date_of_birth = ?, qualification = ?, total_experience = ?, 
-                        nationality = ?, religion = ?, marital_status = ?, gender = ?, 
-                        blood_group = ?, photograph = ?, current_address = ?, 
-                        permanent_address = ?, last_working_day = ?, reason_of_separation = ?
+                    UPDATE employees SET
+                        employee_code = ?, name = ?, email = ?, contact_number = ?,
+                        department_id = ?, shift_id = ?, site_id = ?, basic_salary = ?,
+                        daily_wage = ?, joining_date = ?, password = ?,
+                        uan_number = ?, esic_number = ?, aadhar_number = ?, pan_number = ?,
+                        designation = ?, reporting_manager_id = ?, emergency_contact_number = ?,
+                        date_of_birth = ?, qualification = ?, total_experience = ?,
+                        nationality = ?, religion = ?, marital_status = ?, gender = ?,
+                        blood_group = ?, photograph = ?, current_address = ?,
+                        permanent_address = ?, last_working_day = ?, reason_of_separation = ?,
+                        aadhar_card_document = ?
                     WHERE id = ?
                 ");
-                
+
                 $stmt->execute([
-                    $employee_code, $name, $email, $contact_number, $department_id, 
-                    $shift_id, $site_id, $basic_salary, $daily_wage, $epf_number, 
-                    $joining_date, $hashedPassword, $uan_number, $esic_number, 
+                    $employee_code, $name, $email, $contact_number, $department_id,
+                    $shift_id, $site_id, $basic_salary, $daily_wage,
+                    $joining_date, $hashedPassword, $uan_number, $esic_number,
                     $aadhar_number, $pan_number, $designation, $reporting_manager_id,
                     $emergency_contact_number, $date_of_birth, $qualification,
                     $total_experience, $nationality, $religion, $marital_status,
                     $gender, $blood_group, $photograph_path, $current_address,
                     $permanent_address, $last_working_day, $reason_of_separation,
-                    $employee_id
+                    $aadhar_card_path, $employee_id
                 ]);
             } else {
                 $stmt = $pdo->prepare("
-                    UPDATE employees SET 
-                        employee_code = ?, name = ?, email = ?, contact_number = ?, 
-                        department_id = ?, shift_id = ?, site_id = ?, basic_salary = ?, 
-                        daily_wage = ?, epf_number = ?, joining_date = ?,
-                        uan_number = ?, esic_number = ?, aadhar_number = ?, pan_number = ?, 
-                        designation = ?, reporting_manager_id = ?, emergency_contact_number = ?, 
-                        date_of_birth = ?, qualification = ?, total_experience = ?, 
-                        nationality = ?, religion = ?, marital_status = ?, gender = ?, 
-                        blood_group = ?, photograph = ?, current_address = ?, 
-                        permanent_address = ?, last_working_day = ?, reason_of_separation = ?
+                    UPDATE employees SET
+                        employee_code = ?, name = ?, email = ?, contact_number = ?,
+                        department_id = ?, shift_id = ?, site_id = ?, basic_salary = ?,
+                        daily_wage = ?, joining_date = ?,
+                        uan_number = ?, esic_number = ?, aadhar_number = ?, pan_number = ?,
+                        designation = ?, reporting_manager_id = ?, emergency_contact_number = ?,
+                        date_of_birth = ?, qualification = ?, total_experience = ?,
+                        nationality = ?, religion = ?, marital_status = ?, gender = ?,
+                        blood_group = ?, photograph = ?, current_address = ?,
+                        permanent_address = ?, last_working_day = ?, reason_of_separation = ?,
+                        aadhar_card_document = ?
                     WHERE id = ?
                 ");
-                
+
                 $stmt->execute([
-                    $employee_code, $name, $email, $contact_number, $department_id, 
-                    $shift_id, $site_id, $basic_salary, $daily_wage, $epf_number, 
-                    $joining_date, $uan_number, $esic_number, $aadhar_number, 
+                    $employee_code, $name, $email, $contact_number, $department_id,
+                    $shift_id, $site_id, $basic_salary, $daily_wage,
+                    $joining_date, $uan_number, $esic_number, $aadhar_number,
                     $pan_number, $designation, $reporting_manager_id,
                     $emergency_contact_number, $date_of_birth, $qualification,
                     $total_experience, $nationality, $religion, $marital_status,
                     $gender, $blood_group, $photograph_path, $current_address,
                     $permanent_address, $last_working_day, $reason_of_separation,
-                    $employee_id
+                    $aadhar_card_path, $employee_id
                 ]);
             }
             
@@ -259,6 +303,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             border-radius: 8px;
             margin-bottom: 1rem;
         }
+        .required {
+            color: #dc2626;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -286,37 +334,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                         <label for="employee_code">Employee Code *</label>
                                         <input type="text" id="employee_code" name="employee_code" class="form-control" required value="<?php echo htmlspecialchars($employee['employee_code']); ?>">
                                     </div>
-                                    
+
                                     <div class="form-group">
                                         <label for="name">Full Name *</label>
                                         <input type="text" id="name" name="name" class="form-control" required value="<?php echo htmlspecialchars($employee['name']); ?>">
                                     </div>
                                 </div>
-                                
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="email">Email</label>
-                                        <input type="email" id="email" name="email" class="form-control" value="<?php echo htmlspecialchars($employee['email'] ?? ''); ?>">
-                                    </div>
-                                    
-                                    <div class="form-group">
-                                        <label for="contact_number">Contact Number *</label>
-                                        <input type="tel" id="contact_number" name="contact_number" class="form-control" required value="<?php echo htmlspecialchars($employee['contact_number'] ?? $employee['phone'] ?? ''); ?>">
-                                    </div>
-                                </div>
-                                
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="emergency_contact_number">Emergency Contact Number</label>
-                                        <input type="tel" id="emergency_contact_number" name="emergency_contact_number" class="form-control" value="<?php echo htmlspecialchars($employee['emergency_contact_number'] ?? ''); ?>">
-                                    </div>
-                                    
-                                    <div class="form-group">
-                                        <label for="password">New Password (leave empty to keep current)</label>
-                                        <input type="password" id="password" name="password" class="form-control">
-                                    </div>
-                                </div>
-                                
+
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label for="photograph">Profile Photograph</label>
@@ -328,6 +352,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                         <?php endif; ?>
                                         <input type="file" id="photograph" name="photograph" class="form-control" accept="image/*">
                                         <small class="form-text text-muted">Max size: 5MB. Formats: JPG, PNG, GIF</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="contact_number">Contact Number *</label>
+                                        <input type="tel" id="contact_number" name="contact_number" class="form-control" required value="<?php echo htmlspecialchars($employee['contact_number'] ?? $employee['phone'] ?? ''); ?>">
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="password">New Password (leave empty to keep current)</label>
+                                        <input type="password" id="password" name="password" class="form-control" minlength="6">
+                                        <small class="form-text text-muted">Minimum 6 characters required if changing password</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="email">Email <span class="required">*</span></label>
+                                        <input type="email" id="email" name="email" class="form-control" required value="<?php echo htmlspecialchars($employee['email'] ?? ''); ?>">
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="emergency_contact_number">Emergency Contact Number</label>
+                                        <input type="tel" id="emergency_contact_number" name="emergency_contact_number" class="form-control" value="<?php echo htmlspecialchars($employee['emergency_contact_number'] ?? ''); ?>">
                                     </div>
                                 </div>
                             </div>
@@ -393,14 +442,30 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                             <!-- Government Documents -->
                             <div class="form-section">
-                                <h4><i class="fas fa-file-alt"></i> Government Documents</h4>
+                                <h4><i class="fas fa-file-alt"></i> Identification Document</h4>
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label for="aadhar_number">Aadhar Number</label>
                                         <input type="text" id="aadhar_number" name="aadhar_number" class="form-control" maxlength="12" value="<?php echo htmlspecialchars($employee['aadhar_number'] ?? ''); ?>">
                                         <small class="form-text text-muted">12 digit number</small>
                                     </div>
-                                    
+
+                                    <div class="form-group">
+                                        <label for="aadhar_card_upload">Aadhar Card Upload</label>
+                                        <?php if (!empty($employee['aadhar_card_document'])): ?>
+                                            <div class="mb-2">
+                                                <small class="text-muted">Current file: </small>
+                                                <a href="../../<?php echo htmlspecialchars($employee['aadhar_card_document']); ?>" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                    <i class="fas fa-eye"></i> View Current Document
+                                                </a>
+                                            </div>
+                                        <?php endif; ?>
+                                        <input type="file" id="aadhar_card_upload" name="aadhar_card_upload" class="form-control" accept="image/*,.pdf">
+                                        <small class="form-text text-muted">Upload new Aadhar card image or PDF (Max size: 5MB)</small>
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
                                     <div class="form-group">
                                         <label for="pan_number">PAN Number</label>
                                         <input type="text" id="pan_number" name="pan_number" class="form-control" maxlength="10" style="text-transform: uppercase" value="<?php echo htmlspecialchars($employee['pan_number'] ?? ''); ?>">
@@ -417,8 +482,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     
                                     <div class="form-group">
                                         <label for="esic_number">ESIC Number</label>
-                                        <input type="text" id="esic_number" name="esic_number" class="form-control" maxlength="17" value="<?php echo htmlspecialchars($employee['esic_number'] ?? ''); ?>">
-                                        <small class="form-text text-muted">17 digit ESIC number</small>
+                                        <input type="text" id="esic_number" name="esic_number" class="form-control" maxlength="10" pattern="\d{10}" value="<?php echo htmlspecialchars($employee['esic_number'] ?? ''); ?>">
+                                        <small class="form-text text-muted">10 digit ESIC number (e.g., 4407500306)</small>
                                     </div>
                                 </div>
                             </div>
@@ -428,13 +493,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 <h4><i class="fas fa-briefcase"></i> Professional Information</h4>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="designation">Designation</label>
-                                        <input type="text" id="designation" name="designation" class="form-control" value="<?php echo htmlspecialchars($employee['designation'] ?? ''); ?>">
+                                        <label for="joining_date">Date of Joining *</label>
+                                        <input type="date" id="joining_date" name="joining_date" class="form-control" required value="<?php echo htmlspecialchars($employee['joining_date']); ?>">
                                     </div>
-                                    
+
                                     <div class="form-group">
-                                        <label for="department_id">Department</label>
-                                        <select id="department_id" name="department_id" class="form-control">
+                                        <label for="designation">Designation <span class="required">*</span></label>
+                                        <input type="text" id="designation" name="designation" class="form-control" required value="<?php echo htmlspecialchars($employee['designation'] ?? ''); ?>">
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="department_id">Department <span class="required">*</span></label>
+                                        <select id="department_id" name="department_id" class="form-control" required>
                                             <option value="">Select Department</option>
                                             <?php foreach ($departments as $dept): ?>
                                                 <option value="<?php echo $dept['id']; ?>" <?php echo (($employee['department_id'] ?? '') == $dept['id']) ? 'selected' : ''; ?>>
@@ -443,9 +515,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                             <?php endforeach; ?>
                                         </select>
                                     </div>
-                                </div>
-                                
-                                <div class="form-row">
+
                                     <div class="form-group">
                                         <label for="reporting_manager_id">Reporting Manager</label>
                                         <select id="reporting_manager_id" name="reporting_manager_id" class="form-control">
@@ -457,22 +527,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                             <?php endforeach; ?>
                                         </select>
                                     </div>
-                                    
-                                    <div class="form-group">
-                                        <label for="joining_date">Joining Date *</label>
-                                        <input type="date" id="joining_date" name="joining_date" class="form-control" required value="<?php echo htmlspecialchars($employee['joining_date']); ?>">
-                                    </div>
                                 </div>
-                                
+
                                 <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="qualification">Qualification</label>
-                                        <input type="text" id="qualification" name="qualification" class="form-control" value="<?php echo htmlspecialchars($employee['qualification'] ?? ''); ?>">
-                                    </div>
-                                    
                                     <div class="form-group">
                                         <label for="total_experience">Total Experience (Years)</label>
                                         <input type="number" id="total_experience" name="total_experience" class="form-control" step="0.1" min="0" max="50" value="<?php echo htmlspecialchars($employee['total_experience'] ?? ''); ?>">
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="qualification">Highest Education</label>
+                                        <input type="text" id="qualification" name="qualification" class="form-control" value="<?php echo htmlspecialchars($employee['qualification'] ?? ''); ?>">
                                     </div>
                                 </div>
                             </div>
@@ -517,17 +582,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     </div>
                                     
                                     <div class="form-group">
-                                        <label for="daily_wage">Daily Wage</label>
+                                        <label for="daily_wage">Gross Salary</label>
                                         <input type="number" id="daily_wage" name="daily_wage" class="form-control" step="0.01" min="0" value="<?php echo htmlspecialchars($employee['daily_wage'] ?? ''); ?>">
                                     </div>
                                 </div>
                                 
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="epf_number">EPF Number</label>
-                                        <input type="text" id="epf_number" name="epf_number" class="form-control" value="<?php echo htmlspecialchars($employee['epf_number'] ?? ''); ?>">
-                                    </div>
-                                </div>
                             </div>
 
                             <!-- Address Information -->
@@ -633,7 +692,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         });
         
         document.getElementById('esic_number').addEventListener('input', function() {
-            this.value = this.value.replace(/\D/g, '').substring(0, 17);
+            this.value = this.value.replace(/\D/g, '').substring(0, 10);
         });
         
         // Format PAN number

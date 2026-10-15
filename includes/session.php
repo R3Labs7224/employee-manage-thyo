@@ -114,6 +114,30 @@ function logAdminAction($action, $target_type = null, $target_id = null, $detail
 }
 
 function logout() {
+    if (isLoggedIn()) {
+        $user_id = $_SESSION['user_id'];
+
+        // Log the logout activity
+        try {
+            // Include database config to ensure we have $pdo
+            require_once __DIR__ . '/../config/database.php';
+
+            if (isset($pdo)) {
+                $logout_stmt = $pdo->prepare(
+                    "INSERT INTO logout_logs (user_id, logout_time, ip_address, user_agent) VALUES (?, NOW(), ?, ?)"
+                );
+                $logout_stmt->execute([
+                    $user_id,
+                    $_SERVER['REMOTE_ADDR'] ?? null,
+                    $_SERVER['HTTP_USER_AGENT'] ?? null
+                ]);
+            }
+        } catch (Exception $e) {
+            // Don't fail logout if logging fails
+            error_log("Logout logging error: " . $e->getMessage());
+        }
+    }
+
     session_destroy();
     header('Location: login.php');
     exit;

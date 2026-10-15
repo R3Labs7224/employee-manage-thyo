@@ -23,8 +23,8 @@ if (!$task_id) {
 }
 
 try {
-    // Get task details
-    $stmt = $pdo->prepare("SELECT title, description FROM tasks WHERE id = ? AND admin_created = 1");
+    // Get task details from unified table
+    $stmt = $pdo->prepare("SELECT title, description FROM tasks WHERE id = ? AND task_type = 'admin_assigned'");
     $stmt->execute([$task_id]);
     $task = $stmt->fetch();
 
@@ -34,26 +34,42 @@ try {
         exit;
     }
 
-    // Get task assignments
+    // Get all tasks with same title and assigned_by to show all assignments
     $stmt = $pdo->prepare("
-        SELECT ta.*,
+        SELECT t.id, t.title, t.status, t.notes, t.started_at, t.completed_at,
+               e.name as display_name,
+               e.employee_code,
                u.username,
-               COALESCE(e.name, u.username) as display_name,
-               COALESCE(e.employee_code, 'N/A') as employee_code,
                u.role
-        FROM task_assignments ta
-        JOIN users u ON ta.assigned_to = u.id
-        LEFT JOIN employees e ON u.username = e.email OR u.id = e.id
-        WHERE ta.task_id = ?
-        ORDER BY u.role, display_name
+        FROM tasks t
+        JOIN employees e ON t.assigned_to_employee_id = e.id
+        LEFT JOIN users u ON t.assigned_by_user_id = u.id
+        WHERE t.title = ? AND t.task_type = 'admin_assigned'
+        ORDER BY e.name
     ");
-    $stmt->execute([$task_id]);
+    $stmt->execute([$task['title']]);
     $assignments = $stmt->fetchAll();
+
+    // Format assignments to match expected structure
+    $formatted_assignments = [];
+    foreach ($assignments as $assignment) {
+        $formatted_assignments[] = [
+            'id' => $assignment['id'],
+            'status' => $assignment['status'],
+            'notes' => $assignment['notes'],
+            'started_at' => $assignment['started_at'],
+            'completed_at' => $assignment['completed_at'],
+            'username' => $assignment['username'] ?? 'N/A',
+            'display_name' => $assignment['display_name'],
+            'employee_code' => $assignment['employee_code'] ?? 'N/A',
+            'role' => $assignment['role'] ?? 'employee'
+        ];
+    }
 
     echo json_encode([
         'success' => true,
         'task' => $task,
-        'assignments' => $assignments
+        'assignments' => $formatted_assignments
     ]);
 
 } catch (PDOException $e) {

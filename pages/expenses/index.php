@@ -2,8 +2,15 @@
 require_once '../../config/database.php';
 require_once '../../includes/session.php';
 require_once '../../includes/functions.php';
+require_once '../../includes/admin_helpers.php';
 
 requireLogin();
+
+// Check if user has admin permission to view expenses
+if (!hasAdminPermission('expenses.view')) {
+    header('Location: ../../index.php?error=access_denied');
+    exit;
+}
 
 $pageTitle = 'Expense Management';
 $message = '';
@@ -105,7 +112,7 @@ if (!empty($month_filter)) {
 }
 
 try {
-    // Get expense requests with all related data
+    // Get expense requests with all related data using unified tasks table
     $sql = "
         SELECT ex.*,
                e.name as employee_name,
@@ -114,6 +121,7 @@ try {
                ec.name as category_name,
                ec.description as category_description,
                t.title as task_title,
+               t.task_identifier,
                s.name as site_name
         FROM expenses ex
         JOIN employees e ON ex.employee_id = e.id
@@ -137,8 +145,8 @@ try {
     $categories_stmt = $pdo->query("SELECT id, name FROM expense_categories WHERE is_active = 1 ORDER BY name");
     $categories = $categories_stmt->fetchAll();
 
-    // Get tasks for filter dropdown
-    $tasks_stmt = $pdo->query("SELECT id, title FROM tasks WHERE status IN ('active', 'completed') ORDER BY title LIMIT 100");
+    // Get tasks for filter dropdown from unified tasks table
+    $tasks_stmt = $pdo->query("SELECT id, title, task_identifier FROM tasks WHERE status IN ('active', 'completed', 'in_progress') ORDER BY title LIMIT 100");
     $tasks = $tasks_stmt->fetchAll();
 
     // Get summary stats with current filters
@@ -318,7 +326,7 @@ try {
                                         <?php foreach ($tasks as $task): ?>
                                         <option value="<?php echo $task['id']; ?>"
                                                 <?php echo $task_filter == $task['id'] ? 'selected' : ''; ?>>
-                                            <?php echo htmlspecialchars($task['title']); ?>
+                                            <?php echo $task['task_identifier'] ? htmlspecialchars($task['task_identifier'] . ' - ' . $task['title']) : htmlspecialchars($task['title']); ?>
                                         </option>
                                         <?php endforeach; ?>
                                     </select>
@@ -448,6 +456,10 @@ try {
                                                 </td>
                                                 <td>
                                                     <?php if ($request['task_title']): ?>
+                                                        <?php if ($request['task_identifier']): ?>
+                                                            <span style="color: #007bff; font-weight: 500; font-size: 0.85rem;"><?php echo htmlspecialchars($request['task_identifier']); ?></span>
+                                                            <br>
+                                                        <?php endif; ?>
                                                         <span title="<?php echo htmlspecialchars($request['task_title']); ?>">
                                                             <?php echo strlen($request['task_title']) > 30 ? htmlspecialchars(substr($request['task_title'], 0, 27)) . '...' : htmlspecialchars($request['task_title']); ?>
                                                         </span>
@@ -465,12 +477,15 @@ try {
                                                 </td>
                                                 <td>
                                                     <?php if ($request['receipt_image']): ?>
-                                                        <i class="fas fa-paperclip" style="color: #28a745;" title="Receipt attached"></i>
+                                                        <a href="../../assets/images/uploads/expenses/<?php echo $request['receipt_image']; ?>"
+                                                           target="_blank" class="btn" style="background: #28a745; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                                                            <i class="fas fa-receipt"></i> View Receipt
+                                                        </a>
                                                     <?php else: ?>
-                                                        <span style="color: #999;">-</span>
+                                                        <span style="color: #999;">No Receipt</span>
                                                     <?php endif; ?>
                                                     <?php if ($request['receipt_number']): ?>
-                                                        <small style="display: block; color: #666;">#<?php echo htmlspecialchars($request['receipt_number']); ?></small>
+                                                        <small style="display: block; color: #666; margin-top: 4px;">#<?php echo htmlspecialchars($request['receipt_number']); ?></small>
                                                     <?php endif; ?>
                                                 </td>
                                                 <td><?php echo formatDate($request['request_date']); ?></td>

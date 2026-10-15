@@ -2,6 +2,7 @@
 require_once '../../config/database.php';
 require_once '../../includes/session.php';
 require_once '../../includes/functions.php';
+require_once '../../includes/task_identifier.php';
 
 requireLogin();
 
@@ -22,47 +23,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $title = sanitize($_POST['title']);
     $description = sanitize($_POST['description']);
     $priority = $_POST['priority'] ?? 'medium';
-    $due_date = $_POST['due_date'] ?? null;
+    $start_date = $_POST['start_date'] ?? null;
+    $end_date = $_POST['end_date'] ?? null;
     $assigned_users = $_POST['assigned_users'] ?? [];
     $site_id = $_POST['site_id'] ?? null;
+    $expense_required = isset($_POST['expense_required']) ? 1 : 0;
+    $budget_amount = $expense_required && !empty($_POST['budget_amount']) ? (float)$_POST['budget_amount'] : null;
 
     if (!empty($title) && !empty($assigned_users)) {
         try {
             $pdo->beginTransaction();
 
-            // Insert into tasks table with admin-created flag
-            $stmt = $pdo->prepare("
-                INSERT INTO tasks (title, description, priority, due_date, site_id, assigned_by, admin_created, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, 1, 'active', NOW())
-            ");
+            // Generate task identifier ONCE for this task (before creating individual assignments)
+            $task_identifier = generateTaskIdentifier($pdo, $title, getSiteNameById($pdo, $site_id));
 
-            if ($stmt->execute([$title, $description, $priority, $due_date, $site_id, $user['id']])) {
-                $task_id = $pdo->lastInsertId();
-
-                // Insert task assignments for selected users
-                $stmt_assign = $pdo->prepare("
-                    INSERT INTO task_assignments (task_id, assigned_to, assigned_by, status)
-                    VALUES (?, ?, ?, 'pending')
+            // Create separate task for each assigned user in unified table
+            $created_count = 0;
+            foreach ($assigned_users as $user_id) {
+                // Map user ID to employee ID
+                $emp_stmt = $pdo->prepare("
+                    SELECT e.id FROM employees e
+                    JOIN users u ON e.email = u.email
+                    WHERE u.id = ? AND e.status = 'active'
                 ");
+                $emp_stmt->execute([$user_id]);
+                $employee = $emp_stmt->fetch();
 
-                foreach ($assigned_users as $user_id) {
-                    $stmt_assign->execute([$task_id, $user_id, $user['id']]);
+                if ($employee) {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO tasks (
+                            title, description, task_type, assigned_to_employee_id, assigned_by_user_id,
+                            site_id, priority, start_date, due_date, status, expense_required, budget_amount, task_identifier, created_at
+                        ) VALUES (?, ?, 'admin_assigned', ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, NOW())
+                    ");
+
+                    if ($stmt->execute([$title, $description, $employee['id'], $user['id'], $site_id, $priority, $start_date, $end_date, $expense_required, $budget_amount, $task_identifier])) {
+                        $created_count++;
+                    }
                 }
+            }
 
+            if ($created_count > 0) {
                 $pdo->commit();
 
-                logAdminAction('assign_task', 'task', $task_id, [
+                logAdminAction('assign_task', 'unified_task', null, [
                     'title' => $title,
-                    'assigned_users' => $assigned_users
+                    'start_date' => $start_date,
+                    'end_date' => $end_date,
+                    'expense_required' => $expense_required,
+                    'budget_amount' => $budget_amount,
+                    'assigned_users' => $assigned_users,
+                    'created_count' => $created_count
                 ]);
 
-                $message = 'Task assigned successfully to ' . count($assigned_users) . ' user(s)';
+                $message = "Task assigned successfully to {$created_count} user(s)";
                 $messageType = 'success';
 
                 // Clear form data
                 $_POST = [];
             } else {
-                throw new Exception('Failed to create task');
+                throw new Exception('No valid employees found for assigned users');
             }
         } catch (Exception $e) {
             $pdo->rollback();
@@ -202,13 +222,58 @@ $sites = $stmt->fetchAll();
                                             <option value="high" <?php echo ($_POST['priority'] ?? '') === 'high' ? 'selected' : ''; ?>>High</option>
                                         </select>
                                     </div>
+                                </div>
+
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="start_date">Start Date</label>
+                                        <input type="date" id="start_date" name="start_date" class="form-control"
+                                               value="<?php echo htmlspecialchars($_POST['start_date'] ?? ''); ?>"
+                                               min="<?php echo date('Y-m-d'); ?>"
+                                               onchange="calculateDuration()">
+                                    </div>
 
                                     <div class="form-group">
-                                        <label for="due_date">Due Date</label>
-                                        <input type="date" id="due_date" name="due_date" class="form-control"
-                                               value="<?php echo htmlspecialchars($_POST['due_date'] ?? ''); ?>"
-                                               min="<?php echo date('Y-m-d'); ?>">
+                                        <label for="end_date">End Date</label>
+                                        <input type="date" id="end_date" name="end_date" class="form-control"
+                                               value="<?php echo htmlspecialchars($_POST['end_date'] ?? ''); ?>"
+                                               min="<?php echo date('Y-m-d'); ?>"
+                                               onchange="calculateDuration()">
                                     </div>
+                                </div>
+
+                                <div class="form-group" id="duration-display" style="display: none;">
+                                    <label>Duration</label>
+                                    <div class="duration-info">
+                                        <span id="duration-text"></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Budget Section -->
+                            <div class="form-section">
+                                <h4><i class="fas fa-dollar-sign"></i> Budget Information</h4>
+
+                                <div class="form-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="expense_required" name="expense_required"
+                                               onchange="toggleBudgetField()"
+                                               <?php echo isset($_POST['expense_required']) ? 'checked' : ''; ?>>
+                                        <span class="checkmark-budget"></span>
+                                        <span class="checkbox-text">Expense Required</span>
+                                    </label>
+                                    <small class="form-text text-muted">Check this if the task requires budget allocation</small>
+                                </div>
+
+                                <div class="form-group" id="budget-amount-group" style="display: none;">
+                                    <label for="budget_amount">Budget Amount <span class="required">*</span></label>
+                                    <div class="input-group">
+                                        <span class="input-prefix">₹</span>
+                                        <input type="number" id="budget_amount" name="budget_amount" class="form-control"
+                                               step="0.01" min="0" placeholder="Enter budget amount"
+                                               value="<?php echo htmlspecialchars($_POST['budget_amount'] ?? ''); ?>">
+                                    </div>
+                                    <small class="form-text text-muted">Enter the allocated budget amount for this task</small>
                                 </div>
                             </div>
 
@@ -519,6 +584,76 @@ $sites = $stmt->fetchAll();
             border: 1px solid #fca5a5;
         }
 
+        .duration-info {
+            padding: 0.75rem;
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 6px;
+            font-weight: 500;
+            color: #0c4a6e;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            cursor: pointer;
+            padding: 0.75rem;
+            background: #f9fafb;
+            border-radius: 8px;
+            border: 2px solid #e5e7eb;
+            transition: all 0.2s ease;
+        }
+
+        .checkbox-label:hover {
+            background: #f0f9ff;
+            border-color: #3b82f6;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #f97316;
+            cursor: pointer;
+        }
+
+        .checkbox-text {
+            font-weight: 500;
+            color: #374151;
+            font-size: 0.875rem;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+        }
+
+        .input-prefix {
+            background: #f3f4f6;
+            border: 2px solid #e5e7eb;
+            border-right: none;
+            padding: 0.75rem 1rem;
+            border-radius: 8px 0 0 8px;
+            font-weight: 600;
+            color: #374151;
+            font-size: 1rem;
+        }
+
+        .input-group .form-control {
+            border-radius: 0 8px 8px 0;
+            border-left: none;
+        }
+
+        .input-group .form-control:focus {
+            border-left: 2px solid #f97316;
+        }
+
+        .form-text {
+            margin-top: 0.5rem;
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+
         @media (max-width: 768px) {
             .page-header {
                 flex-direction: column;
@@ -567,6 +702,16 @@ $sites = $stmt->fetchAll();
                     return false;
                 }
 
+                // Validate budget if expense is required
+                const expenseRequired = document.getElementById('expense_required').checked;
+                const budgetAmount = document.getElementById('budget_amount').value;
+
+                if (expenseRequired && (!budgetAmount || budgetAmount <= 0)) {
+                    e.preventDefault();
+                    alert('Please enter a valid budget amount when expense is required');
+                    return false;
+                }
+
                 // Show loading state
                 const submitBtn = form.querySelector('button[type="submit"]');
                 if (submitBtn) {
@@ -588,6 +733,83 @@ $sites = $stmt->fetchAll();
                     }
                 });
             });
+        });
+
+        // Calculate duration between start and end dates
+        function calculateDuration() {
+            const startDate = document.getElementById('start_date').value;
+            const endDate = document.getElementById('end_date').value;
+            const durationDisplay = document.getElementById('duration-display');
+            const durationText = document.getElementById('duration-text');
+
+            if (startDate && endDate) {
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+
+                if (end >= start) {
+                    const timeDiff = end.getTime() - start.getTime();
+                    const dayDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+                    let durationString = '';
+                    if (dayDiff === 0) {
+                        durationString = 'Same day';
+                    } else if (dayDiff === 1) {
+                        durationString = '1 day';
+                    } else {
+                        durationString = dayDiff + ' days';
+                    }
+
+                    durationText.textContent = durationString;
+                    durationDisplay.style.display = 'block';
+                } else {
+                    durationText.textContent = 'End date must be after start date';
+                    durationText.style.color = '#dc2626';
+                    durationDisplay.style.display = 'block';
+                }
+            } else {
+                durationDisplay.style.display = 'none';
+            }
+        }
+
+        // Set minimum end date based on start date
+        document.getElementById('start_date').addEventListener('change', function() {
+            const startDate = this.value;
+            const endDateInput = document.getElementById('end_date');
+
+            if (startDate) {
+                endDateInput.min = startDate;
+                if (endDateInput.value && endDateInput.value < startDate) {
+                    endDateInput.value = startDate;
+                }
+            }
+            calculateDuration();
+        });
+
+        // Toggle budget amount field based on expense required checkbox
+        function toggleBudgetField() {
+            const expenseRequired = document.getElementById('expense_required');
+            const budgetGroup = document.getElementById('budget-amount-group');
+            const budgetAmount = document.getElementById('budget_amount');
+
+            if (expenseRequired.checked) {
+                budgetGroup.style.display = 'block';
+                budgetAmount.required = true;
+            } else {
+                budgetGroup.style.display = 'none';
+                budgetAmount.required = false;
+                budgetAmount.value = '';
+            }
+        }
+
+        // Initialize budget field on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            toggleBudgetField();
+
+            // Initialize form values on page load
+            const expenseCheckbox = document.getElementById('expense_required');
+            if (expenseCheckbox && expenseCheckbox.checked) {
+                toggleBudgetField();
+            }
         });
     </script>
 </body>

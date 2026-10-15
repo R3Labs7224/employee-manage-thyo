@@ -23,6 +23,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             
             if ($user && password_verify($password, $user['password'])) {
                 $_SESSION['user_id'] = $user['id'];
+
+                // Log the login activity
+                try {
+                    $login_stmt = $pdo->prepare(
+                        "INSERT INTO login_logs (user_id, login_time, ip_address, user_agent) VALUES (?, NOW(), ?, ?)"
+                    );
+                    $login_stmt->execute([
+                        $user['id'],
+                        $_SERVER['REMOTE_ADDR'] ?? null,
+                        $_SERVER['HTTP_USER_AGENT'] ?? null
+                    ]);
+
+                    // Update last_login in users table
+                    $update_stmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
+                    $update_stmt->execute([$user['id']]);
+                } catch (PDOException $e) {
+                    // Don't fail login if logging fails
+                    error_log("Login logging error: " . $e->getMessage());
+                }
+
                 header('Location: index.php');
                 exit;
             } else {
@@ -74,13 +94,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <button type="submit" class="btn btn-primary">
                     <i class="fas fa-sign-in-alt"></i> Login
                 </button>
+
+                <div style="text-align: center; margin-top: 1rem;">
+                    <a href="forgot_password.php" style="color: #4f46e5; text-decoration: none; font-size: 0.9rem;">
+                        <i class="fas fa-key"></i> Forgot Password?
+                    </a>
+                </div>
             </form>
-            
-            <div style="margin-top: 2rem; text-align: center; color: #666; font-size: 0.9rem;">
-                <p><strong>Default Login:</strong></p>
-                <p>Username: <code>admin</code><br>
-                Password: <code>password</code></p>
-            </div>
         </div>
     </div>
 </body>

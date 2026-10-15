@@ -2,17 +2,44 @@
 require_once '../../config/database.php';
 require_once '../../includes/session.php';
 require_once '../../includes/functions.php';
+require_once '../../includes/admin_helpers.php';
 
 requireLogin();
 
-// Check if user has permission
-if (!hasPermission('superadmin') && !hasPermission('supervisor')) {
-    header('Location: ../../index.php');
+// Check if user has admin permission to view employees
+if (!hasAdminPermission('employees.view')) {
+    header('Location: ../../index.php?error=access_denied');
     exit;
 }
 
 $pageTitle = 'Employees';
 $message = '';
+
+// Handle delete action
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_employee') {
+    if (!hasAdminPermission('employees.delete')) {
+        header('Location: index.php?error=access_denied');
+        exit;
+    }
+
+    $employee_id = (int)$_POST['employee_id'];
+
+    try {
+        // Soft delete - set status to inactive instead of hard delete
+        $stmt = $pdo->prepare("UPDATE employees SET status = 'inactive' WHERE id = ?");
+        if ($stmt->execute([$employee_id])) {
+            logAdminAction('delete_employee', 'employee', $employee_id);
+            header('Location: index.php?success=Employee deleted successfully');
+            exit;
+        } else {
+            header('Location: index.php?error=Failed to delete employee');
+            exit;
+        }
+    } catch (PDOException $e) {
+        header('Location: index.php?error=Database error occurred');
+        exit;
+    }
+}
 
 // Handle success/error messages
 if (isset($_GET['success'])) {
@@ -31,21 +58,26 @@ if (isset($_GET['error'])) {
 $search = $_GET['search'] ?? '';
 $department_filter = $_GET['department'] ?? '';
 $status_filter = $_GET['status'] ?? 'active';
+$created_by_filter = $_GET['created_by'] ?? '';
 
 // Build query with new fields
 $query = "
-    SELECT 
+    SELECT
         e.*,
         d.name as department_name,
         s.name as shift_name,
         st.name as site_name,
         rm.name as reporting_manager_name,
-        rm.employee_code as reporting_manager_code
-    FROM employees e 
-    LEFT JOIN departments d ON e.department_id = d.id 
-    LEFT JOIN shifts s ON e.shift_id = s.id 
+        rm.employee_code as reporting_manager_code,
+        COALESCE(u.username, emp_creator.name) as created_by_name,
+        emp_creator.employee_code as created_by_code
+    FROM employees e
+    LEFT JOIN departments d ON e.department_id = d.id
+    LEFT JOIN shifts s ON e.shift_id = s.id
     LEFT JOIN sites st ON e.site_id = st.id
     LEFT JOIN employees rm ON e.reporting_manager_id = rm.id
+    LEFT JOIN users u ON e.created_by = u.id
+    LEFT JOIN employees emp_creator ON e.created_by = emp_creator.id
     WHERE e.status = ?
 ";
 
@@ -62,18 +94,38 @@ if (!empty($department_filter)) {
     $params[] = $department_filter;
 }
 
+if (!empty($created_by_filter)) {
+    $query .= " AND e.created_by = ?";
+    $params[] = $created_by_filter;
+}
+
 $query .= " ORDER BY e.name";
 
 try {
     $stmt = $pdo->prepare($query);
     $stmt->execute($params);
     $employees = $stmt->fetchAll();
-    
+
     // Get departments for filter dropdown
     $departments = $pdo->query("SELECT * FROM departments WHERE status = 'active' ORDER BY name")->fetchAll();
+
+    // Get all users (admins) and employees who have created other employees (for filter dropdown)
+    $creators = $pdo->query("
+        SELECT DISTINCT u.id, u.username as name, NULL as employee_code, 'user' as type
+        FROM users u
+        INNER JOIN employees created ON u.id = created.created_by
+        WHERE u.status = 'active'
+        UNION
+        SELECT DISTINCT e.id, e.name, e.employee_code, 'employee' as type
+        FROM employees e
+        INNER JOIN employees created ON e.id = created.created_by
+        WHERE e.status = 'active'
+        ORDER BY name
+    ")->fetchAll();
 } catch (PDOException $e) {
     $employees = [];
     $departments = [];
+    $creators = [];
     $message = '<div class="alert alert-error">Error fetching employees.</div>';
 }
 ?>
@@ -123,7 +175,7 @@ try {
         }
         .filters-row {
             display: grid;
-            grid-template-columns: 2fr 1fr 1fr auto;
+            grid-template-columns: 2fr 1fr 1fr 1fr auto;
             gap: 1rem;
             align-items: end;
         }
@@ -133,6 +185,19 @@ try {
         .government-docs {
             font-size: 0.85em;
             color: #666;
+        }
+        .doc-view-btn {
+            padding: 2px 6px;
+            font-size: 0.7rem;
+            margin-left: 5px;
+            border-radius: 3px;
+            transition: all 0.2s ease;
+        }
+        .doc-view-btn:hover {
+            background-color: #3b82f6;
+            border-color: #3b82f6;
+            color: white;
+            transform: scale(1.05);
         }
         .status-badge {
             padding: 0.25rem 0.5rem;
@@ -168,7 +233,7 @@ try {
                 <div class="card">
                     <div class="card-header">
                         <h3><i class="fas fa-users"></i> All Employees (<?php echo count($employees); ?>)</h3>
-                        <?php if (hasPermission('superadmin')): ?>
+                        <?php if (hasAdminPermission('employees.create')): ?>
                             <a href="add.php" class="btn btn-primary">
                                 <i class="fas fa-plus"></i> Add Employee
                             </a>
@@ -207,7 +272,27 @@ try {
                                             <option value="inactive" <?php echo ($status_filter === 'inactive') ? 'selected' : ''; ?>>Inactive</option>
                                         </select>
                                     </div>
-                                    
+
+                                    <div class="form-group">
+                                        <label for="created_by">Created By</label>
+                                        <select id="created_by" name="created_by" class="form-control">
+                                            <option value="">All Creators</option>
+                                            <?php foreach ($creators as $creator): ?>
+                                                <option value="<?php echo $creator['id']; ?>"
+                                                        <?php echo ($created_by_filter == $creator['id']) ? 'selected' : ''; ?>>
+                                                    <?php
+                                                    echo htmlspecialchars($creator['name']);
+                                                    if (!empty($creator['employee_code'])) {
+                                                        echo ' (' . htmlspecialchars($creator['employee_code']) . ')';
+                                                    } else {
+                                                        echo ' (Admin)';
+                                                    }
+                                                    ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+
                                     <div class="form-group">
                                         <button type="submit" class="btn btn-primary">
                                             <i class="fas fa-search"></i> Filter
@@ -318,7 +403,17 @@ try {
                                             <td>
                                                 <div class="government-docs">
                                                     <?php if (!empty($employee['aadhar_number'])): ?>
-                                                        <div>Aadhar: <?php echo htmlspecialchars($employee['aadhar_number']); ?></div>
+                                                        <div>
+                                                            Aadhar: <?php echo htmlspecialchars($employee['aadhar_number']); ?>
+                                                            <?php if (!empty($employee['aadhar_card_document'])): ?>
+                                                                <a href="../../<?php echo htmlspecialchars($employee['aadhar_card_document']); ?>"
+                                                                   target="_blank"
+                                                                   class="btn btn-sm btn-outline-info doc-view-btn"
+                                                                   title="View Aadhar Document">
+                                                                    <i class="fas fa-eye"></i>
+                                                                </a>
+                                                            <?php endif; ?>
+                                                        </div>
                                                     <?php endif; ?>
                                                     <?php if (!empty($employee['pan_number'])): ?>
                                                         <div>PAN: <?php echo htmlspecialchars($employee['pan_number']); ?></div>
@@ -336,19 +431,26 @@ try {
                                             </td>
                                             
                                             <td class="actions-column">
-                                               
-                                                
-                                                <?php if (hasPermission('superadmin')): ?>
-                                                    <a href="edit.php?id=<?php echo $employee['id']; ?>" 
+
+
+                                                <?php if (hasAdminPermission('employees.edit')): ?>
+                                                    <a href="edit.php?id=<?php echo $employee['id']; ?>"
                                                        class="btn btn-sm btn-primary" title="Edit">
                                                         <i class="fas fa-edit"></i>
                                                     </a>
-                                                    
-                                                    <a href="javascript:void(0)" 
-                                                       onclick="confirmDelete(<?php echo $employee['id']; ?>, '<?php echo addslashes($employee['name']); ?>')" 
-                                                       class="btn btn-sm btn-danger" title="Delete">
-                                                        <i class="fas fa-trash"></i>
-                                                    </a>
+                                                <?php endif; ?>
+
+                                                <?php if (hasAdminPermission('employees.delete')): ?>
+                                                    <form method="POST" action="index.php" style="display: inline;" class="no-loading">
+                                                        <input type="hidden" name="action" value="delete_employee">
+                                                        <input type="hidden" name="employee_id" value="<?php echo $employee['id']; ?>">
+                                                        <button type="submit"
+                                                                class="btn btn-sm btn-danger no-loading"
+                                                                title="Delete"
+                                                                onclick="return confirm('Are you sure you want to delete employee <?php echo addslashes($employee['name']); ?>? This action cannot be undone.')">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </form>
                                                 <?php endif; ?>
                                             </td>
                                         </tr>
@@ -364,12 +466,6 @@ try {
     </div>
 
     <script>
-        function confirmDelete(id, name) {
-            if (confirm(`Are you sure you want to delete employee "${name}"? This action cannot be undone.`)) {
-                window.location.href = `delete.php?id=${id}`;
-            }
-        }
-        
         // Auto-submit form on status change
         document.getElementById('status').addEventListener('change', function() {
             this.form.submit();

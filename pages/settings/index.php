@@ -2,12 +2,13 @@
 require_once '../../config/database.php';
 require_once '../../includes/session.php';
 require_once '../../includes/functions.php';
+require_once '../../includes/admin_helpers.php';
 
 requireLogin();
 
-// Check if user has permission
-if (!hasPermission('superadmin')) {
-    header('Location: ../../index.php');
+// Check if user has admin permission to view settings
+if (!hasAdminPermission('settings.view')) {
+    header('Location: ../../index.php?error=access_denied');
     exit;
 }
 
@@ -454,7 +455,17 @@ try {
                                 <div style="font-size: 0.9rem; opacity: 0.9;">Define work schedules</div>
                             </div>
                         </a>
-                        
+
+                        <?php if (hasAdminPermission('tasks.manage')): ?>
+                        <a href="../tasks/assign.php" class="btn btn-primary" style="padding: 1.5rem; text-decoration: none; background: linear-gradient(135deg, var(--orange-400), var(--orange-600)); display: flex; align-items: center;">
+                            <i class="fas fa-tasks"></i>
+                            <div style="margin-left: 1rem; text-align: left;">
+                                <div style="font-weight: 700; font-size: 1.1rem;">Add Task</div>
+                                <div style="font-size: 0.9rem; opacity: 0.9;">Assign tasks to employees</div>
+                            </div>
+                        </a>
+                        <?php endif; ?>
+
                     </div>
                 </div>
                 

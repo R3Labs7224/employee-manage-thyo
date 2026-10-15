@@ -82,8 +82,8 @@ try {
     // Get active tasks count
     $stmt = $pdo->prepare("
         SELECT COUNT(*) as active_count
-        FROM tasks 
-        WHERE employee_id = ? AND status IN ('active', 'in_progress')
+        FROM tasks
+        WHERE assigned_to_employee_id = ? AND status IN ('active', 'in_progress')
     ");
     $stmt->execute([$employee['id']]);
     $active_tasks = $stmt->fetchColumn();

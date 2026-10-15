@@ -192,19 +192,19 @@ function createRippleEffect(event, element) {
 
 // Page transitions
 function initializePageTransitions() {
-    const links = document.querySelectorAll('a[href]:not([href^="http"]):not([href^="#"]):not([target="_blank"])');
-    
+    const links = document.querySelectorAll('a[href]:not([href^="http"]):not([href^="#"]):not([target="_blank"]):not(.menu-link)');
+
     links.forEach(link => {
         link.addEventListener('click', function(e) {
             const href = this.getAttribute('href');
             if (href && href !== '#' && !href.startsWith('javascript:')) {
                 e.preventDefault();
-                
+
                 // Fade out current page
                 document.body.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
                 document.body.style.opacity = '0';
                 document.body.style.transform = 'translateY(20px)';
-                
+
                 setTimeout(() => {
                     window.location.href = href;
                 }, 300);

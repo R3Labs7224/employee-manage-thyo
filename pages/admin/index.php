@@ -22,6 +22,37 @@ $user = getUser();
 $message = '';
 $messageType = '';
 
+// Handle URL messages
+if (isset($_GET['success'])) {
+    switch ($_GET['success']) {
+        case 'admin_updated':
+            $message = 'Admin updated successfully';
+            $messageType = 'success';
+            break;
+    }
+}
+
+if (isset($_GET['error'])) {
+    switch ($_GET['error']) {
+        case 'cannot_edit_self':
+            $message = 'Cannot edit your own account';
+            $messageType = 'error';
+            break;
+        case 'admin_not_found':
+            $message = 'Admin not found';
+            $messageType = 'error';
+            break;
+        case 'cannot_edit_superadmin':
+            $message = 'Cannot edit superadmin account';
+            $messageType = 'error';
+            break;
+        case 'database_error':
+            $message = 'Database error occurred';
+            $messageType = 'error';
+            break;
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -86,10 +117,16 @@ try {
 // Get all admin users
 try {
     $stmt = $pdo->prepare("
-        SELECT u.*, ar.display_name as role_display, cr.username as created_by_username
+        SELECT u.*, ar.display_name as role_display, cr.username as created_by_username,
+               lo.logout_time as last_logout_time
         FROM users u
         LEFT JOIN admin_roles ar ON u.admin_role_id = ar.id
         LEFT JOIN users cr ON u.created_by = cr.id
+        LEFT JOIN (
+            SELECT user_id, MAX(logout_time) as logout_time
+            FROM logout_logs
+            GROUP BY user_id
+        ) lo ON u.id = lo.user_id
         WHERE u.is_admin = 1
         ORDER BY u.created_at DESC
     ");
@@ -203,8 +240,9 @@ try {
                                     <th>Role</th>
                                     <th>Status</th>
                                     <th>Created By</th>
-                                    <th>Created At</th>
+                                    <th>Created On</th>
                                     <th>Last Login</th>
+                                    <th>Last Logout</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -234,7 +272,16 @@ try {
                                     <td><?php echo date('M j, Y', strtotime($admin['created_at'])); ?></td>
                                     <td>
                                         <?php if ($admin['last_login']): ?>
-                                            <?php echo date('M j, Y H:i', strtotime($admin['last_login'])); ?>
+                                            <small><?php echo date('M j, Y', strtotime($admin['last_login'])); ?></small><br>
+                                            <small style="color: #666;"><?php echo date('H:i:s', strtotime($admin['last_login'])); ?></small>
+                                        <?php else: ?>
+                                            <span class="text-muted">Never</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if ($admin['last_logout_time']): ?>
+                                            <small><?php echo date('M j, Y', strtotime($admin['last_logout_time'])); ?></small><br>
+                                            <small style="color: #666;"><?php echo date('H:i:s', strtotime($admin['last_logout_time'])); ?></small>
                                         <?php else: ?>
                                             <span class="text-muted">Never</span>
                                         <?php endif; ?>
@@ -243,21 +290,27 @@ try {
                                         <div class="action-buttons">
                                             <?php if ($admin['id'] !== $user['id']): ?>
                                                 <?php if ($admin['role'] !== 'superadmin'): ?>
-                                                    <form method="POST" style="display: inline;">
+                                                    <a href="edit.php?id=<?php echo $admin['id']; ?>" class="btn btn-sm btn-primary" title="Edit Admin">
+                                                        <i class="fas fa-edit"></i>
+                                                    </a>
+
+                                                    <form method="POST" action="index.php" style="display: inline;" class="no-loading">
                                                         <input type="hidden" name="action" value="toggle_status">
                                                         <input type="hidden" name="admin_id" value="<?php echo $admin['id']; ?>">
                                                         <input type="hidden" name="new_status" value="<?php echo $admin['status'] === 'active' ? 'inactive' : 'active'; ?>">
-                                                        <button type="submit" class="btn btn-sm btn-warning"
-                                                                onclick="return confirm('Are you sure you want to <?php echo $admin['status'] === 'active' ? 'deactivate' : 'activate'; ?> this admin?')">
+                                                        <button type="submit" class="btn btn-sm btn-warning no-loading"
+                                                                onclick="return confirm('Are you sure you want to <?php echo $admin['status'] === 'active' ? 'deactivate' : 'activate'; ?> this admin?')"
+                                                                title="<?php echo $admin['status'] === 'active' ? 'Deactivate' : 'Activate'; ?> Admin">
                                                             <i class="fas fa-<?php echo $admin['status'] === 'active' ? 'ban' : 'check'; ?>"></i>
                                                         </button>
                                                     </form>
 
-                                                    <form method="POST" style="display: inline;">
+                                                    <form method="POST" action="index.php" style="display: inline;" class="no-loading">
                                                         <input type="hidden" name="action" value="delete_admin">
                                                         <input type="hidden" name="admin_id" value="<?php echo $admin['id']; ?>">
-                                                        <button type="submit" class="btn btn-sm btn-danger"
-                                                                onclick="return confirm('Are you sure you want to delete this admin? This action cannot be undone.')">
+                                                        <button type="submit" class="btn btn-sm btn-danger no-loading"
+                                                                onclick="return confirm('Are you sure you want to delete this admin? This action cannot be undone.')"
+                                                                title="Delete Admin">
                                                             <i class="fas fa-trash"></i>
                                                         </button>
                                                     </form>
@@ -679,6 +732,65 @@ try {
         .btn-secondary:hover {
             background: #e2e8f0;
             transform: translateY(-1px);
+        }
+
+        /* Action buttons styling */
+        .action-buttons {
+            display: flex;
+            gap: 0.25rem;
+            align-items: center;
+        }
+
+        .btn-sm {
+            padding: 0.375rem 0.5rem;
+            font-size: 0.75rem;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 32px;
+            height: 32px;
+        }
+
+        .btn-sm i {
+            font-size: 0.75rem;
+        }
+
+        .btn-sm.btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            color: white;
+        }
+
+        .btn-sm.btn-primary:hover {
+            background: linear-gradient(135deg, #1d4ed8, #1e40af);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-sm.btn-warning {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+        }
+
+        .btn-sm.btn-warning:hover {
+            background: linear-gradient(135deg, #d97706, #b45309);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);
+        }
+
+        .btn-sm.btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+        }
+
+        .btn-sm.btn-danger:hover {
+            background: linear-gradient(135deg, #dc2626, #b91c1c);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
         }
     </style>
 

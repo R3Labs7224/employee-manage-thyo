@@ -2,10 +2,17 @@
 require_once '../../config/database.php';
 require_once '../../includes/session.php';
 require_once '../../includes/functions.php';
+require_once '../../includes/admin_helpers.php';
 
 requireLogin();
 
-$pageTitle = 'Leave Requests Management';
+// Check if user has admin permission to view Leave Request
+if (!hasAdminPermission('leave.view')) {
+    header('Location: ../../index.php?error=access_denied');
+    exit;
+}
+
+$pageTitle = 'Leave Request Management';
 $message = '';
 
 // Handle delete actions
@@ -14,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_action'])) {
     
     // Check if user has permission to delete
     if (!hasPermission('superadmin') && $user['role'] !== 'hr') {
-        $message = '<div class="alert alert-error">You do not have permission to delete leave requests.</div>';
+        $message = '<div class="alert alert-error">You do not have permission to delete Leave Request.</div>';
     } else {
         try {
             if ($_POST['delete_action'] === 'single') {
@@ -124,9 +131,9 @@ if (!empty($date_to)) {
 }
 
 try {
-    // Get leave requests with employee details
+    // Get Leave Request with employee details
     $sql = "
-        SELECT lr.*, 
+        SELECT lr.*,
                e.name as employee_name,
                e.employee_code,
                l1.username as l1_approver_name,
@@ -154,7 +161,7 @@ try {
     $employees = $employees_stmt->fetchAll();
 
 } catch (PDOException $e) {
-    $message = '<div class="alert alert-error">Error fetching leave requests.</div>';
+    $message = '<div class="alert alert-error">Error fetching Leave Request.</div>';
     $leave_requests = [];
     $employees = [];
 }
@@ -355,14 +362,14 @@ $can_delete = hasPermission('superadmin') || $user['role'] === 'hr';
                 
                 <div class="card">
                     <div class="card-header">
-                        <h3><i class="fas fa-calendar-alt"></i> Leave Requests (<?php echo count($leave_requests); ?>)</h3>
+                        <h3><i class="fas fa-calendar-alt"></i> Leave Request (<?php echo count($leave_requests); ?>)</h3>
                     </div>
                     
                     <div class="card-body">
                         <?php if (empty($leave_requests)): ?>
                             <div class="empty-state">
                                 <i class="fas fa-calendar-times"></i>
-                                <p>No leave requests found.</p>
+                                <p>No Leave Request found.</p>
                             </div>
                         <?php else: ?>
                             <div class="table-responsive">
@@ -379,6 +386,7 @@ $can_delete = hasPermission('superadmin') || $user['role'] === 'hr';
                                             <th>Type</th>
                                             <th>Days</th>
                                             <th>Reason</th>
+                                            <th>Attachment</th>
                                             <th>Status</th>
                                             <th>Actions</th>
                                         </tr>
@@ -407,6 +415,18 @@ $can_delete = hasPermission('superadmin') || $user['role'] === 'hr';
                                                 <td><?php echo $request['total_days']; ?> days</td>
                                                 <td class="text-truncate" style="max-width: 200px;" title="<?php echo htmlspecialchars($request['reason']); ?>">
                                                     <?php echo htmlspecialchars(substr($request['reason'], 0, 50) . (strlen($request['reason']) > 50 ? '...' : '')); ?>
+                                                </td>
+                                                <td>
+                                                    <?php if (!empty($request['attachment_path'])): ?>
+                                                        <a href="../../<?php echo htmlspecialchars($request['attachment_path']); ?>"
+                                                           target="_blank"
+                                                           class="btn btn-sm btn-info"
+                                                           title="View attachment">
+                                                            <i class="fas fa-paperclip"></i>
+                                                        </a>
+                                                    <?php else: ?>
+                                                        <span class="text-muted">-</span>
+                                                    <?php endif; ?>
                                                 </td>
                                                 <td>
                                                     <span class="status-badge status-<?php echo $request['status']; ?>">
@@ -526,7 +546,17 @@ $can_delete = hasPermission('superadmin') || $user['role'] === 'hr';
             const row = event.target.closest('tr');
             const cells = row.querySelectorAll('td');
             const employeeCol = <?php echo $can_delete ? '1' : '0'; ?>;
-            
+
+            // Get attachment info
+            const attachmentCell = cells[employeeCol + 5];
+            let attachmentHtml = '';
+            if (attachmentCell.querySelector('a')) {
+                const attachmentLink = attachmentCell.querySelector('a');
+                attachmentHtml = `<a href="${attachmentLink.href}" target="_blank" class="btn btn-sm btn-info"><i class="fas fa-paperclip"></i> View Attachment</a>`;
+            } else {
+                attachmentHtml = 'No attachment';
+            }
+
             const details = `
                 <div style="line-height: 1.6;">
                     <strong>Employee:</strong> ${cells[employeeCol].querySelector('strong').textContent}<br>
@@ -535,10 +565,11 @@ $can_delete = hasPermission('superadmin') || $user['role'] === 'hr';
                     <strong>Type:</strong> ${cells[employeeCol + 2].textContent.trim()}<br>
                     <strong>Total Days:</strong> ${cells[employeeCol + 3].textContent}<br>
                     <strong>Reason:</strong> ${cells[employeeCol + 4].getAttribute('title')}<br>
-                    <strong>Status:</strong> ${cells[employeeCol + 5].textContent.trim()}<br>
+                    <strong>Attachment:</strong> ${attachmentHtml}<br>
+                    <strong>Status:</strong> ${cells[employeeCol + 6].textContent.trim()}<br>
                 </div>
             `;
-            
+
             document.getElementById('detailsContent').innerHTML = details;
             document.getElementById('detailsModal').style.display = 'block';
         }

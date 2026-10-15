@@ -1,6 +1,13 @@
 <?php
 function sanitize($data) {
-    return htmlspecialchars(strip_tags(trim($data)));
+    // Only strip tags and trim - don't HTML encode for storage
+    // HTML encoding should only happen at display time for security
+    return strip_tags(trim($data));
+}
+
+function sanitizeForDisplay($data) {
+    // Use this function when displaying data to users
+    return htmlspecialchars($data, ENT_QUOTES, 'UTF-8');
 }
 
 function formatDate($date, $format = 'Y-m-d H:i:s') {

@@ -4,7 +4,7 @@ $currentDir = basename(dirname($_SERVER['PHP_SELF']));
 
 // Determine the base path for logout
 $basePath = '';
-if ($currentDir === 'employees' || $currentDir === 'attendance' || $currentDir === 'petty_cash' || $currentDir === 'reports' || $currentDir === 'leave' || $currentDir === 'salary' || $currentDir === 'tasks') {
+if ($currentDir === 'employees' || $currentDir === 'attendance' || $currentDir === 'expenses' || $currentDir === 'reports' || $currentDir === 'leave' || $currentDir === 'salary' || $currentDir === 'tasks' || $currentDir === 'admin') {
     $basePath = '../../';
 } elseif ($currentDir === 'settings') {
     $basePath = '../../';

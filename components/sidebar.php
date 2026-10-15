@@ -17,7 +17,7 @@ function isActiveMenu($page, $currentPage, $currentDir = '') {
 $currentDirName = basename(dirname($_SERVER['PHP_SELF']));
 $basePath = '';
 
-if (in_array($currentDirName, ['employees', 'attendance', 'expenses', 'reports', 'settings', 'tasks', 'salary','leave'])) {
+if (in_array($currentDirName, ['employees', 'attendance', 'expenses', 'reports', 'settings', 'tasks', 'salary', 'leave', 'admin'])) {
     $basePath = '../../';
 } else {
     $basePath = '';
@@ -30,14 +30,14 @@ if (in_array($currentDirName, ['employees', 'attendance', 'expenses', 'reports',
     <div class="sidebar-header">
         <div class="logo-container">
             <div class="logo-icon">
-                <img src="<?php echo $basePath; ?>assets/images/logo.png" alt="Maa Group Logo" style="width: 100%; height: 100%; object-fit: contain;">
+                <img src="<?php echo $basePath; ?>assets/images/logo.png" alt="MAA Group Logo" style="width: 100%; height: 100%; object-fit: cover;">
             </div>
+        </div>
+        <div class="company-title">
             <h3 class="logo-text">
-                <span class="logo-main">Maa Group</span>
-
+                <span class="logo-main">MAA GROUP PVT. LTD.</span>
             </h3>
         </div>
-        
     </div>
 
     <!-- Enhanced Navigation Menu -->
@@ -55,12 +55,14 @@ if (in_array($currentDirName, ['employees', 'attendance', 'expenses', 'reports',
             </li>
 
             <!-- Employees Section -->
+            <?php if (hasAdminPermission('employees.view')): ?>
             <li class="menu-section">
                 <h4 class="section-title">
                     <i class="fas fa-users"></i>
                     <span>Employee Management</span>
                 </h4>
             </li>
+            <?php endif; ?>
             
             <?php if (hasAdminPermission('employees.view')): ?>
             <li class="menu-item">
@@ -90,12 +92,14 @@ if (in_array($currentDirName, ['employees', 'attendance', 'expenses', 'reports',
             <?php endif; ?>
 
             <!-- Financial Section -->
+            <?php if (hasAdminPermission('expenses.view') || hasAdminPermission('salary.view')): ?>
             <li class="menu-section">
                 <h4 class="section-title">
                     <i class="fas fa-coins"></i>
                     <span>Financial Management</span>
                 </h4>
             </li>
+            <?php endif; ?>
 
             <?php if (hasAdminPermission('expenses.view')): ?>
             <li class="menu-item">
@@ -125,12 +129,14 @@ if (in_array($currentDirName, ['employees', 'attendance', 'expenses', 'reports',
             <?php endif; ?>
 
             <!-- Operations Section -->
+            <?php if (hasAdminPermission('tasks.view') || hasAdminPermission('reports.view')): ?>
             <li class="menu-section">
                 <h4 class="section-title">
                     <i class="fas fa-cogs"></i>
                     <span>Operations</span>
                 </h4>
             </li>
+            <?php endif; ?>
 
             <?php if (hasAdminPermission('tasks.view')): ?>
             <li class="menu-item">
@@ -155,22 +161,25 @@ if (in_array($currentDirName, ['employees', 'attendance', 'expenses', 'reports',
                 </a>
             </li>
             <?php endif; ?>
+            <!-- Leave Management Section -->
+            <?php if (hasAdminPermission('leave.view')): ?>
             <li class="menu-section">
-                <div class="section-title">
+                <h4 class="section-title">
                     <i class="fas fa-calendar-alt"></i>
                     <span>Leave Management</span>
-                </div>
+                </h4>
             </li>
+            <?php endif; ?>
 
             <?php if (hasAdminPermission('leave.view')): ?>
             <li class="menu-item">
                 <a href="<?php echo $basePath; ?>pages/leave/index.php" class="menu-link <?php
                     echo (strpos($_SERVER['REQUEST_URI'], '/leave/') !== false) ?
-                    'active' : ''; ?>" data-tooltip="Leave Requests">
+                    'active' : ''; ?>" data-tooltip="Leave Request">
                     <div class="menu-icon-wrapper">
                         <i class="fas fa-calendar-check menu-icon"></i>
                     </div>
-                    <span class="menu-text">Leave Requests</span>
+                    <span class="menu-text">Leave Request</span>
                     <div class="menu-indicator"></div>
                 </a>
             </li>
@@ -198,12 +207,14 @@ if (in_array($currentDirName, ['employees', 'attendance', 'expenses', 'reports',
             <?php endif; ?>
 
             <!-- Settings Section -->
+            <?php if (hasAdminPermission('settings.view')): ?>
             <li class="menu-section">
                 <h4 class="section-title">
                     <i class="fas fa-cog"></i>
                     <span>System</span>
                 </h4>
             </li>
+            <?php endif; ?>
 
             <?php if (hasAdminPermission('settings.view')): ?>
             <li class="menu-item">
@@ -279,7 +290,7 @@ if (in_array($currentDirName, ['employees', 'attendance', 'expenses', 'reports',
     
     
     .sidebar-header {
-        padding: 2rem 1.5rem;
+        padding: 0.75rem 1.5rem;
         border-bottom: 1px solid rgba(255, 255, 255, 0.3);
         background: rgba(255, 255, 255, 0.15);
         backdrop-filter: blur(10px);
@@ -301,25 +312,25 @@ if (in_array($currentDirName, ['employees', 'attendance', 'expenses', 'reports',
     .logo-container {
         display: flex;
         align-items: center;
-        gap: 1rem;
+        justify-content: center;
+        position: relative;
+        z-index: 1;
+        margin-bottom: 0.25rem;
+    }
+
+    .company-title {
+        text-align: center;
         position: relative;
         z-index: 1;
     }
     
     .logo-icon {
-        width: 45px;
-        height: 45px;
-        background: white;
-        backdrop-filter: blur(10px);
-        border-radius: var(--radius-lg);
+        width: 55px;
+        height: 55px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.5rem;
-        color: var(--accent-white);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         animation: float 3s ease-in-out infinite;
-        padding: 5px;
     }
     
     .logo-text {
@@ -327,13 +338,16 @@ if (in_array($currentDirName, ['employees', 'attendance', 'expenses', 'reports',
         display: flex;
         flex-direction: column;
         line-height: 1;
+        text-align: center;
     }
-    
+
     .logo-main {
-        font-size: 1.5rem;
-        font-weight: 800;
+        font-size: 1rem;
+        font-weight: 700;
         color: white;
-        text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        letter-spacing: 0.5px;
+        line-height: 1.2;
     }
     
     .logo-sub {

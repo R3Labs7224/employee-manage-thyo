@@ -104,7 +104,7 @@ function getExpensesWithFilters($pdo) {
         $limit = min(100, max(10, (int)($_GET['limit'] ?? 20)));
         $offset = ($page - 1) * $limit;
 
-        // Main query with all related data
+        // Main query with all related data including task identifier
         $main_query = "
             SELECT e.*,
                    emp.name as employee_name,
@@ -113,6 +113,7 @@ function getExpensesWithFilters($pdo) {
                    ec.name as category_name,
                    ec.description as category_description,
                    t.title as task_title,
+                   t.task_identifier,
                    t.id as task_id,
                    s.name as site_name
             FROM expenses e
@@ -259,13 +260,14 @@ function updateExpenseStatus($pdo, $admin_user) {
             $expense_id
         ]);
 
-        // Get updated expense
+        // Get updated expense with task identifier
         $stmt = $pdo->prepare("
             SELECT e.*,
                    emp.name as employee_name,
                    u.username as approved_by_name,
                    ec.name as category_name,
-                   t.title as task_title
+                   t.title as task_title,
+                   t.task_identifier
             FROM expenses e
             LEFT JOIN employees emp ON e.employee_id = emp.id
             LEFT JOIN users u ON e.approved_by = u.id
